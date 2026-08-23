@@ -1,0 +1,24 @@
+[server]
+address = "127.0.0.1"
+port = 8501
+baseUrlPath = "breakout"
+headless = true
+fileWatcherType = "none"
+enableCORS = false
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+# Written by patch_ui.py. The palette the .breakout-card gradients were
+# designed against — dark page, slightly lighter panels, violet accent to
+# match the RS column highlight.
+base = "dark"
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#161b22"
+textColor = "#e6edf3"
+primaryColor = "#a78bfa"

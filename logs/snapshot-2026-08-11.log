@@ -1,0 +1,1231 @@
+=== nightly build started 2026-08-11T16:09:59+00:00 ===
+--- refreshing universe ---
+
+[36m==================================================================
+== 1. fetching every NSE instrument
+==================================================================[0m
+  [32mok  [0m 113,693 instruments in the dump
+
+  everything Kite tags segment=NSE instrument_type=EQ,
+  broken down by SERIES (the suffix after the hyphen):
+
+    SG                     4295   [33mdropped (debt/other)[0m
+    EQ (no suffix)         2801   [32mKEPT[0m
+    N0                      972   [33mdropped (debt/other)[0m
+    SM                      429   [32mKEPT[0m
+    BE                      249   [32mKEPT[0m
+    ST                      131   [32mKEPT[0m
+    GS                      130   [33mdropped (debt/other)[0m
+    N1                      107   [33mdropped (debt/other)[0m
+    TB                       81   [33mdropped (debt/other)[0m
+    SF                       50   [33mdropped (debt/other)[0m
+    GB                       45   [33mdropped (debt/other)[0m
+    N2                       37   [33mdropped (debt/other)[0m
+    BZ                       29   [32mKEPT[0m
+    N3                       29   [33mdropped (debt/other)[0m
+
+  [1m3,639 equities kept, 6,246 dropped[0m
+
+  KSHINTL present: [1mTrue[0m
+  sample: 20MICRONS, 21STCENMGM, 360ONE, 3BBLACKBIO, 3IINFOLTD, 3MINDIA, 3PLAND, 5PAISA, 63MOONS, A2ZINFRA ...
+
+[36m==================================================================
+== 2. how much is currently invisible
+==================================================================[0m
+  6 indices in the registry
+  scannable today      3,641
+  [1mnewly scannable      0[0m
+
+  a few that were invisible:  ...
+
+  [33m2 symbol(s) are in your NIFTY indices but NOT in the equity dump:[0m
+    DUMMYINXGN, DUMMYTRVN
+  [32madded them — the universe is now a strict superset of what you scan today[0m
+
+[36m==================================================================
+== 3. output
+==================================================================[0m
+  /opt/breakoutscanner/nse_all_equity.txt
+  [32mok  [0m wrote 3,641 symbols (31,080 bytes)
+  [32mok  [0m re-read cleanly; KSHINTL is in the list
+
+[36m==================================================================
+== next
+==================================================================[0m
+  Try a slice first — 2,000 symbols on a 512 MB box is a real risk:
+
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+      /opt/breakoutscanner/build_snapshot.py \
+      --symbols-file /opt/breakoutscanner/nse_all_equity.txt --limit 300
+
+  If that completes, drop --limit for the full run. Watch it the first
+  time. [33mAn OOM kill stops it mid-build, and a truncated snapshot is the
+  silent-wrong failure we have spent this session removing.[0m
+
+  Then confirm the stock that started this:
+
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+      /opt/breakoutscanner/diagnose_symbol.py KSHINTL
+universe: 3641 symbols
+--- building snapshot ---
+Nifty Capital Markets: no constituent file found (24 URLs tried)
+$AAKAAR.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AAKAAR.NS']: possibly delisted; no timezone found
+$AARADHYA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AARADHYA.NS']: possibly delisted; no timezone found
+
+[36m== building snapshot: /opt/breakoutscanner/nse_all_equity.txt ==[0m
+  /opt/breakoutscanner/nse_all_equity.txt: 3641 symbols
+  breakout detector: detect_breakout(df, symbol, timeframe, cfg, mode, vol_mult, lookback, atr_period, atr_mult, direction_filter)
+  25/3641     14s  eta 2064s
+$ABHAPOWER.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ABHAPOWER.NS']: possibly delisted; no timezone found
+  50/3641     29s  eta 2084s
+$ACCPL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ACCPL.NS']: possibly delisted; no timezone found
+$ACETEC.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ACETEC.NS']: possibly delisted; no timezone found
+$ACTIVEINFR.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ACTIVEINFR.NS']: possibly delisted; no timezone found
+  75/3641     43s  eta 2048s
+$ADDICTIVE.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ADDICTIVE.NS']: possibly delisted; no timezone found
+$ADISOFT.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ADISOFT.NS']: possibly delisted; no timezone found
+$AERON.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AERON.NS']: possibly delisted; no timezone found
+$AESTHETIK.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AESTHETIK.NS']: possibly delisted; no timezone found
+  100/3641     56s  eta 1990s
+$AGARWALTUF.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AGARWALTUF.NS']: possibly delisted; no timezone found
+  125/3641     71s  eta 1989s
+$AKANKSHA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AKANKSHA.NS']: possibly delisted; no timezone found
+$ALCODIS.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ALCODIS.NS']: possibly delisted; no timezone found
+  150/3641     84s  eta 1962s
+$AMBAAUTO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AMBAAUTO.NS']: possibly delisted; no timezone found
+$AMBANIORGO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AMBANIORGO.NS']: possibly delisted; no timezone found
+  175/3641     98s  eta 1945s
+$AMCL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AMCL.NS']: possibly delisted; no timezone found
+$ANAWIL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ANAWIL.NS']: possibly delisted; no timezone found
+$ANONDITA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ANONDITA.NS']: possibly delisted; no timezone found
+  200/3641    113s  eta 1946s
+$ANYA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ANYA.NS']: possibly delisted; no timezone found
+$APEXECO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['APEXECO.NS']: possibly delisted; no timezone found
+  225/3641    126s  eta 1914s
+$APRAMEYA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['APRAMEYA.NS']: possibly delisted; no timezone found
+$APSISAERO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['APSISAERO.NS']: possibly delisted; no timezone found
+$ARCIIL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ARCIIL.NS']: possibly delisted; no timezone found
+$ARHAM.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ARHAM.NS']: possibly delisted; no timezone found
+  250/3641    140s  eta 1896s
+$ARMOUR.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ARMOUR.NS']: possibly delisted; no timezone found
+$ARUNAYA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ARUNAYA.NS']: possibly delisted; no timezone found
+$ARVINDPORT.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ARVINDPORT.NS']: possibly delisted; no timezone found
+$ASHALOG.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ASHALOG.NS']: possibly delisted; no timezone found
+  275/3641    153s  eta 1878s
+$ASHWINI.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ASHWINI.NS']: possibly delisted; no timezone found
+$ATCENERGY.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ATCENERGY.NS']: possibly delisted; no timezone found
+  300/3641    167s  eta 1858s
+$AUSL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AUSL.NS']: possibly delisted; no timezone found
+$AVANA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AVANA.NS']: possibly delisted; no timezone found
+  325/3641    182s  eta 1852s
+$AVATAR.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AVATAR.NS']: possibly delisted; no timezone found
+$AVIANSH.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AVIANSH.NS']: possibly delisted; no timezone found
+$AVIENCE.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['AVIENCE.NS']: possibly delisted; no timezone found
+  350/3641    193s  eta 1810s
+$BAGDIGITAL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BAGDIGITAL.NS']: possibly delisted; no timezone found
+$BALAJIPHOS.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BALAJIPHOS.NS']: possibly delisted; no timezone found
+  375/3641    206s  eta 1797s
+$BALCO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BALCO.NS']: possibly delisted; no timezone found
+  400/3641    221s  eta 1789s
+$BANKPSU.NS: possibly delisted; no price data found  (1d 2024-11-10 -> 2026-08-12)
+
+1 Failed download:
+['BANKPSU.NS']: possibly delisted; no price data found  (1d 2024-11-10 -> 2026-08-12)
+$BANKPSU.NS: possibly delisted; no price data found  (1d 2020-01-16 -> 2026-08-12)
+
+1 Failed download:
+['BANKPSU.NS']: possibly delisted; no price data found  (1d 2020-01-16 -> 2026-08-12)
+$BANSALWIRE.NS: possibly delisted; no price data found  (1d 2024-11-10 -> 2026-08-12)
+
+1 Failed download:
+['BANSALWIRE.NS']: possibly delisted; no price data found  (1d 2024-11-10 -> 2026-08-12)
+$BARFLEX.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BARFLEX.NS']: possibly delisted; no timezone found
+  425/3641    301s  eta 2279s
+$BHADORA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BHADORA.NS']: possibly delisted; no timezone found
+  450/3641    316s  eta 2244s
+$BIKEWO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BIKEWO.NS']: possibly delisted; no timezone found
+$BIOPOL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BIOPOL.NS']: possibly delisted; no timezone found
+  475/3641    332s  eta 2213s
+$BLUEWATER.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BLUEWATER.NS']: possibly delisted; no timezone found
+$BMLL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BMLL.NS']: possibly delisted; no timezone found
+  500/3641    345s  eta 2167s
+$BNK10BINAV.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BNK10BINAV.NS']: possibly delisted; no timezone found
+$BOSS.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BOSS.NS']: possibly delisted; no timezone found
+$BRACEPORT.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BRACEPORT.NS']: possibly delisted; no timezone found
+$BRANDMAN.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BRANDMAN.NS']: possibly delisted; no timezone found
+  525/3641    359s  eta 2133s
+$BULKCORP.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['BULKCORP.NS']: possibly delisted; no timezone found
+$C2C.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['C2C.NS']: possibly delisted; no timezone found
+  550/3641    373s  eta 2098s
+  575/3641    388s  eta 2068s
+$CEDAAR.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CEDAAR.NS']: possibly delisted; no timezone found
+  600/3641    401s  eta 2032s
+$CHAMUNDA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CHAMUNDA.NS']: possibly delisted; no timezone found
+$CHANDAN.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CHANDAN.NS']: possibly delisted; no timezone found
+$CHETANA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CHETANA.NS']: possibly delisted; no timezone found
+$CKKRETAIL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CKKRETAIL.NS']: possibly delisted; no timezone found
+$CLASSICEIL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CLASSICEIL.NS']: possibly delisted; no timezone found
+  625/3641    414s  eta 1999s
+$CLAYCRAFT.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CLAYCRAFT.NS']: possibly delisted; no timezone found
+  650/3641    427s  eta 1966s
+$CONNPLEX.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CONNPLEX.NS']: possibly delisted; no timezone found
+  675/3641    440s  eta 1936s
+$CSSL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CSSL.NS']: possibly delisted; no timezone found
+$CUDML.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CUDML.NS']: possibly delisted; no timezone found
+  700/3641    505s  eta 2124s
+$CURIS.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CURIS.NS']: possibly delisted; no timezone found
+$CURRENT.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['CURRENT.NS']: possibly delisted; no timezone found
+$DANISH.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DANISH.NS']: possibly delisted; no timezone found
+  725/3641    573s  eta 2303s
+$DCCL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DCCL.NS']: possibly delisted; no timezone found
+$DECCANTRAN.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DECCANTRAN.NS']: possibly delisted; no timezone found
+  750/3641    587s  eta 2262s
+$DELTIC.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DELTIC.NS']: possibly delisted; no timezone found
+$DHANSA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DHANSA.NS']: possibly delisted; no timezone found
+$DHARARAIL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DHARARAIL.NS']: possibly delisted; no timezone found
+$DHARIWAL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DHARIWAL.NS']: possibly delisted; no timezone found
+  775/3641    602s  eta 2224s
+$DIRL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DIRL.NS']: possibly delisted; no timezone found
+$DIVINEHIRA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DIVINEHIRA.NS']: possibly delisted; no timezone found
+$DIVYADHAN.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DIVYADHAN.NS']: possibly delisted; no timezone found
+  800/3641    622s  eta 2209s
+$DRSCARGO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DRSCARGO.NS']: possibly delisted; no timezone found
+  825/3641    644s  eta 2197s
+$DUMMYINXGN.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DUMMYINXGN.NS']: possibly delisted; no timezone found
+$DUMMYTRVN.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['DUMMYTRVN.NS']: possibly delisted; no timezone found
+  850/3641    661s  eta 2171s
+$E2ERAIL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['E2ERAIL.NS']: possibly delisted; no timezone found
+$EBANKINAV.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['EBANKINAV.NS']: possibly delisted; no timezone found
+$EBBE23INAV.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['EBBE23INAV.NS']: possibly delisted; no timezone found
+$EBBE31INAV.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['EBBE31INAV.NS']: possibly delisted; no timezone found
+$ECOLINE.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ECOLINE.NS']: possibly delisted; no timezone found
+$EEPL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['EEPL.NS']: possibly delisted; no timezone found
+  875/3641    671s  eta 2122s
+$ELGNZ.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ELGNZ.NS']: possibly delisted; no timezone found
+  900/3641    685s  eta 2086s
+$EMAPARTNER.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['EMAPARTNER.NS']: possibly delisted; no timezone found
+  925/3641    696s  eta 2043s
+$ENCOMPAS.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ENCOMPAS.NS']: possibly delisted; no timezone found
+$ENVIRO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ENVIRO.NS']: possibly delisted; no timezone found
+$EPWINDIA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['EPWINDIA.NS']: possibly delisted; no timezone found
+$EQU200INAV.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['EQU200INAV.NS']: possibly delisted; no timezone found
+  950/3641    710s  eta 2012s
+$ESPRIT.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ESPRIT.NS']: possibly delisted; no timezone found
+$ETL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ETL.NS']: possibly delisted; no timezone found
+$ETML.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ETML.NS']: possibly delisted; no timezone found
+  975/3641    723s  eta 1978s
+$EXCELLENT.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['EXCELLENT.NS']: possibly delisted; no timezone found
+$EXIMROUTES.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['EXIMROUTES.NS']: possibly delisted; no timezone found
+  1000/3641    802s  eta 2117s
+$FINBUD.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['FINBUD.NS']: possibly delisted; no timezone found
+  1025/3641    814s  eta 2078s
+$FLYSBS.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['FLYSBS.NS']: possibly delisted; no timezone found
+$FOCE.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['FOCE.NS']: possibly delisted; no timezone found
+$FORCAS.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['FORCAS.NS']: possibly delisted; no timezone found
+$FORGEAUTO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['FORGEAUTO.NS']: possibly delisted; no timezone found
+$FRESHARA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['FRESHARA.NS']: possibly delisted; no timezone found
+$FWSTC.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['FWSTC.NS']: possibly delisted; no timezone found
+  1050/3641    836s  eta 2063s
+$GAJANAND.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GAJANAND.NS']: possibly delisted; no timezone found
+$GANESHIN.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GANESHIN.NS']: possibly delisted; no timezone found
+$GANGABATH.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GANGABATH.NS']: possibly delisted; no timezone found
+  1075/3641    851s  eta 2031s
+$GCHOTELS.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GCHOTELS.NS']: possibly delisted; no timezone found
+$GENXAI.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GENXAI.NS']: possibly delisted; no timezone found
+  1100/3641    865s  eta 1998s
+$GJL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GJL.NS']: possibly delisted; no timezone found
+$GLD360INAV.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GLD360INAV.NS']: possibly delisted; no timezone found
+  1125/3641    878s  eta 1963s
+$GML.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GML.NS']: possibly delisted; no timezone found
+  1150/3641    894s  eta 1937s
+$GOLDSHINAV.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GOLDSHINAV.NS']: possibly delisted; no timezone found
+  1175/3641    910s  eta 1910s
+$GREENLEAF.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GREENLEAF.NS']: possibly delisted; no timezone found
+  1200/3641    925s  eta 1882s
+  1225/3641    936s  eta 1846s
+$GRWN50INAV.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GRWN50INAV.NS']: possibly delisted; no timezone found
+  1250/3641    948s  eta 1814s
+$GURUNANAK.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['GURUNANAK.NS']: possibly delisted; no timezone found
+  1275/3641    964s  eta 1789s
+$HAPPY.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['HAPPY.NS']: possibly delisted; no timezone found
+  1300/3641    977s  eta 1760s
+  1325/3641    989s  eta 1729s
+  1350/3641   1002s  eta 1700s
+  1375/3641   1018s  eta 1678s
+  1400/3641   1033s  eta 1654s
+$HPTL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['HPTL.NS']: possibly delisted; no timezone found
+$HVAX.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['HVAX.NS']: possibly delisted; no timezone found
+$HYBRIDINAV.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['HYBRIDINAV.NS']: possibly delisted; no timezone found
+$IBMFNIINAV.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['IBMFNIINAV.NS']: possibly delisted; no timezone found
+$ICELCO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ICELCO.NS']: possibly delisted; no timezone found
+  1425/3641   1045s  eta 1625s
+  1450/3641   1055s  eta 1594s
+$IDEALTECHO.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['IDEALTECHO.NS']: possibly delisted; no timezone found
+$IDENTICAL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['IDENTICAL.NS']: possibly delisted; no timezone found
+  1475/3641   1068s  eta 1568s
+  1500/3641   1084s  eta 1548s
+$INFLUX.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['INFLUX.NS']: possibly delisted; no timezone found
+  1525/3641   1098s  eta 1523s
+$INNOMET.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['INNOMET.NS']: possibly delisted; no timezone found
+$INTEGRITY.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['INTEGRITY.NS']: possibly delisted; no timezone found
+  1550/3641   1111s  eta 1498s
+$INVICTA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['INVICTA.NS']: possibly delisted; no timezone found
+$IPHL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['IPHL.NS']: possibly delisted; no timezone found
+  1575/3641   1124s  eta 1474s
+$ITTL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['ITTL.NS']: possibly delisted; no timezone found
+$IWARE.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['IWARE.NS']: possibly delisted; no timezone found
+  1600/3641   1137s  eta 1451s
+$JAINIK.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['JAINIK.NS']: possibly delisted; no timezone found
+$JAYBEE.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['JAYBEE.NS']: possibly delisted; no timezone found
+$JAYESH.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['JAYESH.NS']: possibly delisted; no timezone found
+  1625/3641   1152s  eta 1429s
+$JEYYAM.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['JEYYAM.NS']: possibly delisted; no timezone found
+  1650/3641   1167s  eta 1408s
+  1675/3641   1181s  eta 1386s
+$JYOTIGLOBL.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['JYOTIGLOBL.NS']: possibly delisted; no timezone found
+$KALANA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['KALANA.NS']: possibly delisted; no timezone found
+  1700/3641   1198s  eta 1367s
+$KATARIA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['KATARIA.NS']: possibly delisted; no timezone found
+$KAYTEX.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['KAYTEX.NS']: possibly delisted; no timezone found
+$KEN.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['KEN.NS']: possibly delisted; no timezone found
+  1725/3641   1214s  eta 1348s
+$KKJEWELS.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['KKJEWELS.NS']: possibly delisted; no timezone found
+  1750/3641   1230s  eta 1329s
+  1775/3641   1243s  eta 1306s
+$KRMAYURVED.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['KRMAYURVED.NS']: possibly delisted; no timezone found
+  1800/3641   1258s  eta 1287s
+$LAKSHYA.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['LAKSHYA.NS']: possibly delisted; no timezone found
+$LAMOSAIC.NS: possibly delisted; no timezone found
+
+1 Failed download:
+['LAMOSAIC.NS']: possibly delisted; no timezone found
+  1825/3641   1271s  eta 1265s
+  1850/3641   1285s  eta 1244s
+  1875/3641   1295s  eta 1220s
+  1900/3641   1307s  eta 1198s
+
+1 Failed download:
+['MACOBSTECH.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  1925/3641   1321s  eta 1178s
+  1950/3641   1335s  eta 1158s
+  1975/3641   1348s  eta 1137s
+
+1 Failed download:
+['MANILAM.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2000/3641   1360s  eta 1116s
+
+1 Failed download:
+['MARUSHIKA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['MAXVOLT.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['MAYASHEEL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2025/3641   1372s  eta 1095s
+
+1 Failed download:
+['MEDISTEP.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2050/3641   1385s  eta 1075s
+
+1 Failed download:
+['METALIC.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['MGSL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2075/3641   1396s  eta 1054s
+
+1 Failed download:
+['MIEL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['MMEL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2100/3641   1408s  eta 1033s
+
+1 Failed download:
+['MOBILISE.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2125/3641   1417s  eta 1011s
+
+1 Failed download:
+['MOHLTHINAV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['MOMCAPINAV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2150/3641   1428s  eta  990s
+
+1 Failed download:
+['MOMIDMINAV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['MON50EINAV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['MONOLITH.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2175/3641   1437s  eta  968s
+  2200/3641   1447s  eta  948s
+
+1 Failed download:
+['MPEL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['MRIL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2225/3641   1459s  eta  929s
+
+1 Failed download:
+['MUNISH.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['MYMUDRA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2250/3641   1472s  eta  910s
+
+1 Failed download:
+['NAMOEWASTE.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['NAVNIFINAV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2275/3641   1486s  eta  892s
+
+1 Failed download:
+['NEELAM.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['NEOCHEM.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['NEPTUNE.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2300/3641   1500s  eta  874s
+
+1 Failed download:
+['NFPSAMPOOR.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2325/3641   1513s  eta  856s
+
+1 Failed download:
+['NIKITA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2350/3641   1525s  eta  838s
+
+1 Failed download:
+['NMSTEEL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['NRVANDANA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2375/3641   1538s  eta  820s
+
+1 Failed download:
+['OBSCP.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2400/3641   1552s  eta  802s
+
+1 Failed download:
+['ONYX.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['OPTIVALUE.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2425/3641   1565s  eta  785s
+
+1 Failed download:
+['OSELDEVICE.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2450/3641   1579s  eta  768s
+
+1 Failed download:
+['PARAMATRIX.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PARAMOUNT.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PARAMPARA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PARTH.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2475/3641   1592s  eta  750s
+
+1 Failed download:
+['PATILAUTOM.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PELATRO.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2500/3641   1604s  eta  732s
+
+1 Failed download:
+['PHOGLOBAL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2525/3641   1617s  eta  715s
+
+1 Failed download:
+['POSITRON.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PPSL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2550/3641   1631s  eta  698s
+
+1 Failed download:
+['PRANIK.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PREMIUM.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PRIMECAB.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2575/3641   1644s  eta  681s
+
+1 Failed download:
+['PROFX.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PROPSHOP.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PSFL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PSRAJ.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2600/3641   1655s  eta  663s
+
+1 Failed download:
+['PURPLEUTED.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['PUSHPA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2625/3641   1666s  eta  645s
+
+1 Failed download:
+['QLINE.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['QVCEL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2650/3641   1679s  eta  628s
+
+1 Failed download:
+['RAJINDLTD.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['RAJPUTANA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2675/3641   1692s  eta  611s
+
+1 Failed download:
+['RAPIDFLEET.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['RAPPID.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['READYMIX.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2700/3641   1704s  eta  594s
+
+1 Failed download:
+['REXPRO.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['RFBL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['RICHA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2725/3641   1716s  eta  577s
+
+1 Failed download:
+['RNFI.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['RNPL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2750/3641   1728s  eta  560s
+
+1 Failed download:
+['ROYALARC.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['RTL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2775/3641   1741s  eta  543s
+
+1 Failed download:
+['SACHEEROME.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SAFEENTP.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2800/3641   1753s  eta  526s
+
+1 Failed download:
+['SAHASRA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SAJHOTELS.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SAMAY.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2825/3641   1766s  eta  510s
+
+1 Failed download:
+['SATECH.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SATKARTAR.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SATTVAENGG.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2850/3641   1779s  eta  494s
+
+1 Failed download:
+['SAVY.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SAWALIYA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2875/3641   1791s  eta  477s
+
+1 Failed download:
+['SDL24BINAV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SDREAMS.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2900/3641   1804s  eta  461s
+
+1 Failed download:
+['SELLOWRAP.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2925/3641   1817s  eta  445s
+
+1 Failed download:
+['SFML.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2950/3641   1829s  eta  429s
+
+1 Failed download:
+['SHEEL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SHETHJI.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  2975/3641   1842s  eta  412s
+
+1 Failed download:
+['SHIVASHRIT.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SHKSIL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SHREEDHAR.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SHRIAHIMSA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SHRIKANHA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3000/3641   1855s  eta  396s
+
+1 Failed download:
+['SHUBHSHREE.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SHYAMDHANI.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SIDDHICOTS.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SIL360INAV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SILETFINAV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3025/3641   1866s  eta  380s
+
+1 Failed download:
+['SILKY.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SIMCA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3050/3641   1877s  eta  364s
+
+1 Failed download:
+['SMALL2INAV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SMARTEN.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3075/3641   1889s  eta  348s
+
+1 Failed download:
+['SNEHAA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SOCL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3100/3641   1901s  eta  332s
+
+1 Failed download:
+['SPCON.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SPEB.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3125/3641   1915s  eta  316s
+
+1 Failed download:
+['SPPPOLY.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SPUNWEB.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SSEGL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3150/3641   1927s  eta  300s
+
+1 Failed download:
+['STRIDERS.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['STUDIOLSD.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SUBAHOTELS.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3175/3641   1939s  eta  285s
+
+1 Failed download:
+['SUNLITE.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['SUNTECH.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3200/3641   1952s  eta  269s
+  3225/3641   1966s  eta  254s
+
+1 Failed download:
+['TANKUP.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3250/3641   1980s  eta  238s
+
+1 Failed download:
+['TAURIAN.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3275/3641   1994s  eta  223s
+
+1 Failed download:
+['TEAMTECH.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['TECHD.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['TECHERA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['TEJA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['TEJASCARGO.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3300/3641   2005s  eta  207s
+
+1 Failed download:
+['THESL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3325/3641   2020s  eta  192s
+  3350/3641   2033s  eta  177s
+
+1 Failed download:
+['TROM.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3375/3641   2047s  eta  161s
+
+1 Failed download:
+['TSC.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3400/3641   2061s  eta  146s
+
+1 Failed download:
+['UHTL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['UNILEX.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3425/3641   2074s  eta  131s
+
+1 Failed download:
+['USHAFIN.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['UTKAL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['UTSSAV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3450/3641   2085s  eta  115s
+
+1 Failed download:
+['VALUE360.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3475/3641   2102s  eta  100s
+
+1 Failed download:
+['VDEAL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['VGINFOTECH.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['VICTORYEV.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3500/3641   2116s  eta   85s
+
+1 Failed download:
+['VIESL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['VIGOR.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['VIJAYPD.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3525/3641   2125s  eta   70s
+
+1 Failed download:
+['VISDEM.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['VIVIDEL.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['VLINFRA.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['VMOBILE.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3550/3641   2133s  eta   55s
+
+1 Failed download:
+['VOLERCAR.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3575/3641   2142s  eta   40s
+
+1 Failed download:
+['WHITEFORCE.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+
+1 Failed download:
+['WOL3D.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3600/3641   2151s  eta   25s
+
+1 Failed download:
+['YAAP.NS']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+  3625/3641   2160s  eta   10s
+  [31mok[0m  3364 of 3641 symbols (92.4% coverage), 277 skipped, 2473s
+        skipped symbols written to /opt/breakoutscanner/data_cache/skipped.txt
+         277  no bars returned
+        e.g. AAKAAR, AARADHYA, ABHAPOWER, ACCPL, ACETEC, ACTIVEINFR, ADDICTIVE, ADISOFT
+  [31mWARN[0m coverage below 95% — this snapshot is NOT the whole market. Check /opt/breakoutscanner/data_cache/skipped.txt before trusting an empty scan result.
+  [32mok[0m  breakouts: 301 total · 204 bullish · 97 bearish
+        1D: 165
+        1W: 83
+        1M: 160
+        Compare these against your live scan. They call the
+        SAME detect_breakout(), so they should agree exactly.
+  [32mok[0m  wrote 3364 rows for 2026-08-11  (2 day(s) of history)
+       /opt/breakoutscanner/data_cache/snapshot.duckdb
+
+[36m  predefined scanners against this snapshot:[0m
+    Horizontal Resistance             264
+    Tight Setup (Daily)                43
+    VCP                               121
+    RS High Before Price High          31
+    Flags & Pennants                   55
+    Inside Bar (Daily)                382
+    21 EMA Shakeout                    11
+    Gap Up (Unfilled)                 356
+    Volume Gainers                    121
+    Recent IPO Setups                  46
+    Minervini Trend Template          500
+    ★ Daily Screen — breakout in a strong stock   61
+
+  Open the Screener page in the app to query it interactively.
+wrote 3364 rows for 2026-08-11  (92% of 3641)
+=== DEGRADED: 92% coverage ===
+=== finished 2026-08-11T16:51:31+00:00 ===

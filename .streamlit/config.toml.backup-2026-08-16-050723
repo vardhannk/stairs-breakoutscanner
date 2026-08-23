@@ -1,0 +1,14 @@
+[server]
+address = "127.0.0.1"
+port = 8501
+baseUrlPath = "breakout"
+headless = true
+fileWatcherType = "none"
+enableCORS = false
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"

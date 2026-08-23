@@ -1,0 +1,578 @@
+"""
+All NSE — the main scanner's view, over every listed stock.
+
+Goes in /opt/breakoutscanner-lab/pages/6_All_NSE.py
+
+WHAT THIS IS
+------------
+The same cards and metric tiles as the main `app` page, reading the nightly
+snapshot instead of scanning live.
+
+The main page calls scan_universe(), which fetches bars per symbol. Over 3,303
+symbols that is roughly half an hour in a browser session, and Streamlit would
+drop the connection first. The snapshot has already done that work overnight,
+so the same view over the whole market returns in milliseconds.
+
+The trade-off, stated plainly: this shows the last completed session, not an
+intraday scan. For "what broke out", that is the right frame anyway — a
+breakout is confirmed on a close, and a stock above its level at 2pm that
+closes below it did not break out.
+
+STYLING
+-------
+CSS copied verbatim from app.py. Not imported, because app.py is a Streamlit
+script and importing it would execute the entire main page as a side effect.
+Streamlit injects CSS per page regardless, so each page needs its own copy.
+
+ONE RULE THE MAIN PAGE DOES NOT HAVE
+------------------------------------
+`traded_today`. Every snapshot row is stamped with the build date, but 326 of
+3,046 stocks did not print a bar that day — illiquid names do not trade every
+session. Without that filter, a stock that broke out two days ago and has been
+silent since appears under "today". The toggle below lets you see them, off by
+default.
+"""
+
+import os
+import sys
+
+import pandas as pd
+import streamlit as st
+
+# Shared with the Quality page so "EPS YoY" cannot mean two different things
+# in two places. Optional: a missing module disables the button, it does not
+# break the page.
+try:
+    import fundamentals as FUND
+except Exception:
+    FUND = None
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+st.set_page_config(page_title="All NSE", page_icon="🌐", layout="wide")
+
+try:
+    import advice
+    import scan_engine as SE
+    from build_snapshot import TABLE, connect, db_path
+except Exception as e:                                  # pragma: no cover
+    st.error(f"Could not import a required module: {e}")
+    st.stop()
+
+st.markdown(
+    """
+<style>
+.breakout-card {
+    padding: 0.9rem 1rem;
+    border-radius: 12px;
+    margin-bottom: 0.75rem;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    min-height: 130px;
+}
+.breakout-card.bullish {
+    background: linear-gradient(145deg, #0d2818 0%, #1b4332 45%, #2d6a4f 100%);
+    border-left: 5px solid #52b788;
+}
+.breakout-card.bearish {
+    background: linear-gradient(145deg, #3b0a0a 0%, #6b1515 45%, #9b2226 100%);
+    border-left: 5px solid #f4845f;
+}
+.card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.55rem;
+    flex-wrap: wrap;
+}
+.card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    justify-content: flex-end;
+}
+.card-symbol {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 0.02em;
+}
+.card-badges span {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.14);
+    color: #f8fafc;
+}
+.card-pill {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.14);
+    color: #f8fafc;
+    margin-left: 0.25rem;
+}
+.card-badges .high52,
+.card-pill.high52 {
+    background: rgba(251, 191, 36, 0.25);
+    color: #fde68a;
+}
+.card-stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+    margin-bottom: 0.45rem;
+}
+.card-stat {
+    font-size: 0.82rem;
+    color: #e2e8f0;
+}
+.card-stat b {
+    color: #ffffff;
+    font-weight: 700;
+}
+.card-foot {
+    font-size: 0.74rem;
+    color: #cbd5e1;
+    opacity: 0.92;
+}
+.summary-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.summary-metric {
+    flex: 1 1 120px;
+    min-width: 110px;
+    padding: 0.5rem 0.65rem;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+.summary-metric .sm-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.15rem;
+    opacity: 0.9;
+}
+.summary-metric .sm-value {
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.25;
+    word-break: break-word;
+}
+.summary-metric.breakouts {
+    background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%);
+    border-left: 3px solid #a78bfa;
+}
+.summary-metric.breakouts .sm-label { color: #c4b5fd; }
+.summary-metric.breakouts .sm-value { color: #ede9fe; }
+.summary-metric.bullish {
+    background: linear-gradient(145deg, #052e16 0%, #14532d 100%);
+    border-left: 3px solid #4ade80;
+}
+.summary-metric.bullish .sm-label { color: #86efac; }
+.summary-metric.bullish .sm-value { color: #dcfce7; }
+.summary-metric.bearish {
+    background: linear-gradient(145deg, #450a0a 0%, #7f1d1d 100%);
+    border-left: 3px solid #f87171;
+}
+.summary-metric.bearish .sm-label { color: #fca5a5; }
+.summary-metric.bearish .sm-value { color: #fee2e2; }
+.summary-metric.symbols {
+    background: linear-gradient(145deg, #0c4a6e 0%, #075985 100%);
+    border-left: 3px solid #38bdf8;
+}
+.summary-metric.symbols .sm-label { color: #7dd3fc; }
+.summary-metric.symbols .sm-value { color: #e0f2fe; }
+.summary-metric.scanned {
+    background: linear-gradient(145deg, #451a03 0%, #78350f 100%);
+    border-left: 3px solid #fbbf24;
+}
+.summary-metric.scanned .sm-label { color: #fcd34d; }
+.summary-metric.scanned .sm-value { color: #fef3c7; font-size: 0.82rem; font-weight: 600; }
+</style>""",
+    unsafe_allow_html=True,
+)
+
+
+def _render(html: str) -> None:
+    if hasattr(st, "html"):
+        st.html(html)
+    else:
+        st.markdown(html, unsafe_allow_html=True)
+
+
+def _f(row, key):
+    try:
+        v = float(row.get(key))
+        return v if v == v else None
+    except (TypeError, ValueError):
+        return None
+
+
+DB = db_path()
+if not os.path.isfile(DB):
+    st.title("🌐 All NSE")
+    st.warning("**No snapshot yet.** Build one first.")
+    st.stop()
+
+
+def _conn():
+    # Not cached: a held read connection blocks the nightly build's write lock,
+    # so an open browser tab would stall the pipeline.
+    return connect(DB, read_only=True)
+
+
+conn = _conn()
+try:
+    as_of = conn.execute(f"SELECT max(date) FROM {TABLE}").fetchone()[0]
+    total = conn.execute(f"SELECT count(*) FROM {TABLE} WHERE date=?",
+                         [as_of]).fetchone()[0]
+except Exception as e:
+    st.error(f"Snapshot unreadable ({e}).")
+    st.stop()
+
+st.markdown(
+    f"""
+<div style="background: linear-gradient(135deg, #312e81 0%, #7c3aed 50%, #db2777 100%);
+padding: 1.1rem 1.3rem; border-radius: 12px; margin-bottom: 1rem;">
+<div style="font-size:1.4rem;font-weight:800;color:#fff;">🌐 All NSE Breakout Scanner</div>
+<div style="color:#ede9fe;margin-top:0.35rem;">
+Donchian breakouts with volume confirmation on <b>1 Day</b>, <b>1 Week</b> and
+<b>1 Month</b> — across every listed NSE equity, not an index subset.</div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+<div style="background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.35);
+border-radius:10px;padding:0.6rem 0.9rem;margin-bottom:0.9rem;font-size:0.85rem;">
+⚠️ <b>Disclaimer:</b> research and education only — not investment advice.
+Breakout signals are not recommendations to trade. You may lose capital. Data
+from third-party sources may be delayed or wrong.
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+# ── sidebar ────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("### Filters")
+    direction = st.radio("Direction", ["Bullish", "Bearish", "Both"], index=0,
+                         horizontal=True)
+    # Index views are filters here, never rescans. Nifty 100, Midcap 150,
+    # Smallcap 250 and Microcap 250 are all subsets of the universe this
+    # snapshot already covers, so selecting one costs a WHERE clause rather
+    # than another pass over the market.
+    cap_choice = st.multiselect(
+        "Cap band", ["Large", "Mid", "Small", "Micro", "Below Microcap"],
+        default=[],
+        help="NSE's own classification, from index membership. Empty means "
+             "all. 'Below Microcap' is everything outside every index — the "
+             "part that was invisible before the universe was widened.")
+    # F&O membership is a filter for the same reason cap band is: these are
+    # already in the snapshot, so selecting them costs a WHERE clause rather
+    # than another pass over the market. The list is derived weekly from the
+    # Kite instrument dump — 209 underlyings on 16 Aug — because SEBI revises
+    # it and a hardcoded copy goes wrong silently.
+    segment = st.radio(
+        "Segment", ["All", "F&O only", "Cash only"], index=0, horizontal=True,
+        help="F&O names are the liquid end of the market and the only ones "
+             "where a breakout can be taken with defined risk. They also "
+             "have far better fundamental coverage.")
+    min_turnover = st.slider("Min turnover (₹ crore/day)", 0.0, 100.0, 5.0, 1.0,
+                             help="Below about ₹5 crore your own order moves "
+                                  "the price.")
+    min_rs = st.slider("Min RS Rating", 0, 99, 0,
+                       help="0 includes stocks with no RS Rating — recent "
+                            "listings, which cannot have one.")
+    include_untraded = st.checkbox(
+        "Include stocks that did not trade on the snapshot date", value=False,
+        help="326 of 3,046 stocks did not print a bar on the last build. "
+             "Their breakout is real but older than it appears.")
+    st.divider()
+    st.markdown("### Position sizing")
+    risk = st.number_input("Risk per trade (₹)", 500.0, 1_000_000.0, 5_000.0,
+                           500.0)
+    capital = st.number_input("Total capital (₹)", 0.0, 100_000_000.0,
+                              500_000.0, 10_000.0)
+
+# ── pull every breakout in one query ───────────────────────────────────────
+cols = ("symbol, sector, cap_band, close, breakout_direction, "
+        "breakout_timeframe, breakout_timeframes, breakout_mode, "
+        "breakout_pct, breakout_level, breakout_prior_high, "
+        "breakout_prior_low, breakout_bar_time, breakout_lookback, "
+        "breakout_is_52w_high, breakout_vol_ratio, volume_ratio, "
+        "rs_rating, ret_1m_rank, minervini_score, turnover_30d_cr, "
+        "adr_pct_5d, pct_of_52w_high, last_bar_date, traded_today, "
+        "breakout_1d, breakout_1w, breakout_1m")
+try:
+    rows = conn.execute(
+        f"SELECT {cols} FROM {TABLE} WHERE date = ? AND is_breakout "
+        f"ORDER BY COALESCE(rs_rating, ret_1m_rank, 0) DESC", [as_of]
+    ).fetch_df()
+except Exception as e:
+    st.error(f"Query failed: {e}")
+    st.stop()
+
+if not include_untraded and "traded_today" in rows.columns:
+    rows = rows[rows["traded_today"].fillna(True).astype(bool)]
+
+d = rows["breakout_direction"].astype(str).str.lower()
+n_bull = int(d.str.startswith("bull").sum())
+n_bear = int(d.str.startswith("bear").sum())
+
+st.markdown(
+    f"""
+<div class="summary-metrics">
+  <div class="summary-metric breakouts">
+    <div class="sm-label">Breakouts</div><div class="sm-value">{len(rows)}</div></div>
+  <div class="summary-metric bullish">
+    <div class="sm-label">Bullish</div><div class="sm-value">{n_bull}</div></div>
+  <div class="summary-metric bearish">
+    <div class="sm-label">Bearish</div><div class="sm-value">{n_bear}</div></div>
+  <div class="summary-metric symbols">
+    <div class="sm-label">Symbols Scanned</div><div class="sm-value">{total:,}</div></div>
+  <div class="summary-metric scanned">
+    <div class="sm-label">Snapshot</div><div class="sm-value">{as_of}</div></div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+if direction != "Both":
+    want = "bull" if direction == "Bullish" else "bear"
+    rows = rows[rows["breakout_direction"].astype(str).str.lower()
+                .str.startswith(want)]
+if cap_choice and "cap_band" in rows.columns:
+    rows = rows[rows["cap_band"].isin(cap_choice)]
+if segment != "All" and "in_fno" in rows.columns:
+    _f = rows["in_fno"].fillna(False).astype(bool)
+    rows = rows[_f] if segment == "F&O only" else rows[~_f]
+elif segment != "All":
+    st.warning("in_fno is not in this snapshot yet — run the nightly build "
+               "after applying patch_fno.py. Showing everything.")
+if min_turnover > 0:
+    rows = rows[rows["turnover_30d_cr"].fillna(0) >= min_turnover]
+if min_rs > 0:
+    rows = rows[rows["rs_rating"].fillna(-1) >= min_rs]
+
+st.caption(f"{len(rows)} match your filters · snapshot {as_of} · "
+           f"{total:,} stocks in the universe")
+
+
+def _card_html(r) -> str:
+    dirn = str(r.get("breakout_direction", "")).lower()
+    cls = "bullish" if dirn.startswith("bull") else "bearish"
+    dir_label = "🟢 Bullish" if dirn.startswith("bull") else "🔴 Bearish"
+    tf = str(r.get("breakout_timeframes") or "—")
+
+    badges = [f'<span class="card-pill">{tf}</span>',
+              f'<span class="card-pill">{dir_label}</span>']
+    p52 = _f(r, "pct_of_52w_high")
+    if p52 is not None and p52 >= 99.0:
+        badges.append('<span class="card-pill high52">52W High</span>')
+    rs = _f(r, "rs_rating")
+    if rs is None:
+        # Undefined, not weak. Saying so on the card stops a blank column
+        # being read as a bad score — which is exactly what happened when
+        # NaN was stored as 0 and these stocks looked like the market's worst.
+        badges.append('<span class="card-pill high52">No RS Yet</span>')
+    elif rs >= 80:
+        badges.append(f'<span class="card-pill high52">RS {rs:.0f}</span>')
+
+    bp, vol = _f(r, "breakout_pct"), _f(r, "volume_ratio")
+    sign = "+" if (bp or 0) >= 0 else ""
+    close, lvl = _f(r, "close"), _f(r, "breakout_level")
+    to, adr = _f(r, "turnover_30d_cr"), _f(r, "adr_pct_5d")
+    r1 = _f(r, "ret_1m_rank")
+
+    row1 = "".join(x for x in [
+        f'<span class="card-stat">Close <b>₹{close:,.2f}</b></span>' if close else "",
+        f'<span class="card-stat">Break <b>{sign}{bp:.2f}%</b></span>' if bp is not None else "",
+        f'<span class="card-stat">Vol <b>{vol:.2f}×</b></span>' if vol is not None else "",
+        f'<span class="card-stat">ADR <b>{adr:.1f}%</b></span>' if adr is not None else "",
+    ])
+    row2 = "".join(x for x in [
+        f'<span class="card-stat">Level <b>₹{lvl:,.2f}</b></span>' if lvl else "",
+        f'<span class="card-stat">RS <b>{rs:.0f}</b></span>' if rs is not None else "",
+        f'<span class="card-stat">1m rank <b>{r1:.0f}</b></span>' if r1 is not None else "",
+        f'<span class="card-stat">Turnover <b>₹{to:,.0f} cr</b></span>' if to is not None else "",
+    ])
+
+    foot = []
+    if r.get("sector"):
+        foot.append(str(r.get("sector")))
+    lb = r.get("last_bar_date")
+    traded = r.get("traded_today")
+    if lb:
+        foot.append(f"last bar {lb}"
+                    + ("" if (traded is None or bool(traded))
+                       else "  ⚠️ did not trade on the snapshot date"))
+
+    return (f'<div class="breakout-card {cls}">'
+            f'<div class="card-top">'
+            f'<span class="card-symbol">{r.get("symbol")}</span>'
+            f'<span class="card-badges">{"".join(badges)}</span></div>'
+            f'<div class="card-stat-row">{row1}</div>'
+            f'<div class="card-stat-row">{row2}</div>'
+            f'<span class="card-foot">{" · ".join(foot)}</span></div>')
+
+
+tabs = st.tabs(["All", "Confluence 🌀", "1 Day", "1 Week", "1 Month"])
+
+# Same columns the old scan's table view had, in the same order, plus the
+# snapshot-only ones (RS, 1m rank, Minervini, turnover, cap band) that a live
+# scan could never show because it has no universe-wide context.
+TABLE_COLS = [
+    ("symbol", "Symbol"),
+    ("rs_rating", "RS"),
+    ("breakout_timeframe", "Timeframe"),
+    ("breakout_direction", "Direction"),
+    ("breakout_mode", "Mode"),
+    ("close", "Close"),
+    ("breakout_level", "Break Level"),
+    ("breakout_pct", "Break %"),
+    ("breakout_vol_ratio", "Vol Ratio"),
+    ("breakout_prior_high", "Prior High"),
+    ("breakout_prior_low", "Prior Low"),
+    ("breakout_bar_time", "Bar Date"),
+    ("breakout_lookback", "Lookback"),
+    ("breakout_is_52w_high", "52W High?"),
+    ("breakout_timeframes", "All TFs"),
+    ("cap_band", "Cap Band"),
+    ("sector", "Sector"),
+    ("ret_1m_rank", "1m Rank"),
+    ("minervini_score", "Minervini"),
+    ("turnover_30d_cr", "Turnover ₹cr"),
+    ("adr_pct_5d", "ADR%"),
+    ("pct_of_52w_high", "% of 52w High"),
+    ("last_bar_date", "Last Traded"),
+]
+
+TAB_KEYS = [None, "__confluence__", "breakout_1d", "breakout_1w", "breakout_1m"]
+
+for i, (tab, col) in enumerate(zip(tabs, TAB_KEYS)):
+    with tab:
+        # The Cards/Table toggle lives INSIDE each tab. Placed after
+        # st.tabs() it renders below the whole tab container — which is how
+        # it ended up underneath the table instead of above it. Each tab
+        # needs its own widget key; the shared session value keeps the
+        # choice when you switch tabs.
+        _default = st.session_state.get("all_nse_view", "Cards")
+        view = st.radio(
+            "View", ["Cards", "Table"], horizontal=True,
+            label_visibility="collapsed", key=f"all_nse_view_{i}",
+            index=0 if _default == "Cards" else 1)
+        st.session_state["all_nse_view"] = view
+
+        sub = rows
+        if col == "__confluence__":
+            # More than one timeframe agreeing. The old app called this
+            # Confluence and it is the strongest filter here: a level that
+            # gives way on the daily AND the weekly is a different event
+            # from one that only shows on a single chart.
+            sub = rows[rows["breakout_timeframes"].astype(str).str.contains(",")]
+        elif col and col in rows.columns:
+            sub = rows[rows[col].fillna(False).astype(bool)]
+        if sub.empty:
+            st.info("Nothing here with the current filters.")
+            continue
+        st.caption(f"{len(sub)} stocks")
+        if view == "Table":
+            # ── fundamentals for exactly these rows ───────────────
+            # Behind a button because .info is one request per symbol, about
+            # a second each, and Streamlit re-runs this whole script on every
+            # interaction. Automatic fetching would re-enter that wait on
+            # every filter change and tab switch.
+            fund_cols, fdf = [], None
+            if FUND is not None:
+                _syms = [str(s) for s in sub["symbol"]]
+                _key = f"fund_done_{i}"
+                _want = st.checkbox(
+                    f"Add fundamentals for these {len(_syms)} stocks",
+                    key=f"fund_want_{i}", value=st.session_state.get(_key, False),
+                    help="P/E, P/B, ROE, D/E and quarterly revenue and PAT "
+                         "growth, fetched live and cached for six hours. "
+                         "Roughly one second per stock the first time.")
+                if _want:
+                    if len(_syms) > 300:
+                        st.warning(
+                            f"{len(_syms)} stocks is about "
+                            f"{len(_syms) // 60} minutes of sequential "
+                            f"requests. Narrow the filters first — cap band, "
+                            f"turnover or F&O only — then tick this again.")
+                    else:
+                        _bar = st.progress(0.0, text="Fetching fundamentals…")
+
+                        def _p(done, total, symbol, _b=_bar):
+                            _b.progress(done / max(total, 1),
+                                        text=f"{symbol}  ({done}/{total})")
+
+                        fdf = FUND.fetch_frame(_syms, progress=_p)
+                        _bar.empty()
+                        st.session_state[_key] = True
+                        _got, _tot = FUND.coverage(fdf)
+                        if _got == 0:
+                            st.error(
+                                "No fundamentals returned for any of these. "
+                                "That is a data-source result, not a broken "
+                                "scan — the breakout columns are unaffected.")
+                        else:
+                            st.caption(
+                                f"Fundamentals found for {_got} of {_tot}. "
+                                f"Blank cells are absent data, not zero.")
+                        fund_cols = [c for c in FUND.NUMERIC_COLS
+                                     if c in fdf.columns]
+
+            pairs = [(c, lbl) for c, lbl in TABLE_COLS if c in sub.columns]
+            t = sub[[c for c, _ in pairs]].copy()
+            if "breakout_direction" in t.columns:
+                t["breakout_direction"] = t["breakout_direction"].astype(str).map(
+                    lambda v: "🟢 Bullish" if v.lower().startswith("bull")
+                    else ("🔴 Bearish" if v.lower().startswith("bear") else v))
+            for b in ("breakout_is_52w_high",):
+                if b in t.columns:
+                    t[b] = t[b].map(lambda v: "Yes" if bool(v) else "No")
+            if "breakout_lookback" in t.columns:
+                t["breakout_lookback"] = t["breakout_lookback"].astype("Int64")
+            if fund_cols and fdf is not None:
+                # join on symbol, keeping every scanned row — a stock with no
+                # fundamentals must still appear, with blanks, or the table
+                # quietly becomes a different (shorter) list of stocks
+                t = t.join(fdf[fund_cols], on="symbol")
+                pairs = pairs + [(c, FUND.LABELS.get(c, c)) for c in fund_cols]
+            st.dataframe(t.rename(columns=dict(pairs)).round(2),
+                         hide_index=True, use_container_width=True)
+        else:
+            cap = min(len(sub), 60)
+            cc = st.columns(2)
+            for i in range(cap):
+                r = sub.iloc[i].to_dict()
+                with cc[i % 2]:
+                    _render(_card_html(r))
+                    p = advice.plan(r, risk_rupees=risk, capital=capital)
+                    if p["shares"] > 0:
+                        st.caption(
+                            f"**{p['shares']:,} shares** · stop "
+                            f"₹{p['stop']:,.1f} (−{p['stop_pct']:.1f}%) · "
+                            f"cost ₹{p['notional']:,.0f} · risking "
+                            f"₹{p['shares'] * p['risk_per_share']:,.0f}")
+            if len(sub) > cap:
+                st.caption(f"Showing the first {cap} of {len(sub)}. "
+                           f"Switch to Table for all of them.")
+
+st.caption("Research and education only. Not investment advice. Position "
+           "sizing is arithmetic from the risk figure you entered.")

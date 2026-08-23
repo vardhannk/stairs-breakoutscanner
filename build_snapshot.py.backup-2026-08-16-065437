@@ -1,0 +1,955 @@
+#!/usr/bin/env python3
+"""
+build_snapshot.py — compute one wide row per symbol, once, into DuckDB.
+
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+         /opt/breakoutscanner/build_snapshot.py --universe "NIFTY Smallcap 250"
+    ... --universe all          # every cached index segment
+    ... --limit 40              # quick smoke test
+
+This is the piece that makes ChartsMaze-style screening possible on your
+existing box. Instead of loading 250 symbols' bars every time somebody runs a
+scan, the work happens ONCE and every scanner afterwards is a WHERE clause
+against `indicator_snapshot` — milliseconds instead of minutes.
+
+WHY DUCKDB
+----------
+Not for raw speed — 2,000 rows x 50 columns is trivial for anything. It earns
+its place because the interesting screening questions are WINDOW questions,
+and those belong in SQL rather than pandas:
+
+    "% of each sector trading above RS 80"     <- the metric ChartsMaze ranks
+    "percentile rank of this stock's return    <- RS Rating, universe-relative
+     across the whole universe"
+
+In SQLite those become a pandas round trip: read everything out, group, rank,
+write back. In DuckDB they are one statement, computed where the data already
+is. `sector_breadth_rs80` below is the concrete example.
+
+It is also embedded — a file, no server, no daemon — so nothing new is left
+running on a 512MB box beside a live trading app.
+
+    pip install duckdb        (one ~20MB wheel, no compilation)
+
+MEMORY
+------
+Bars are loaded per symbol and released immediately — never all at once. Peak
+usage is one symbol's history plus the accumulating result rows, which is a
+few MB. This matters: an earlier version of the scanner segfaulted on this
+box, and the cause was library incompatibility rather than memory, but there
+is no reason to go looking for the real thing.
+
+Reuses screen.py and patterns.py exactly as they are. Nothing in breakout.py
+or scanner.py is touched, so detection and the existing pages behave
+identically whether this has been run or not.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import time
+
+import numpy as np
+import pandas as pd
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+DB_NAME = "snapshot.duckdb"
+TABLE = "indicator_snapshot"
+
+SQL_TYPES = {"num": "DOUBLE", "int": "BIGINT", "bool": "BOOLEAN",
+             "text": "VARCHAR"}
+
+
+def connect(path: str | None = None, read_only: bool = False):
+    """
+    Open the snapshot. Read-only for anything that only queries.
+
+    A page that can only read cannot corrupt the file a scheduled build is
+    writing, and DuckDB allows several readers alongside one writer only when
+    the readers say so.
+    """
+    try:
+        import duckdb
+    except ImportError:
+        raise SystemExit(
+            "duckdb is not installed in this interpreter.\n"
+            "  sudo -u breakout /opt/breakoutscanner/.venv/bin/pip install duckdb")
+    target = path or db_path()
+    if read_only:
+        return duckdb.connect(target, read_only=True)
+
+    # DuckDB allows ONE writer or MANY readers, never both. A Streamlit page
+    # holding a read connection therefore blocks the nightly build entirely.
+    # Retry rather than fail: pages open short-lived connections, so the
+    # window is usually under a second, and a scheduled build must not die
+    # because somebody had a browser tab open.
+    import time as _t
+    last = None
+    for attempt in range(1, 13):
+        try:
+            return duckdb.connect(target, read_only=False)
+        except Exception as e:
+            last = e
+            if "lock" not in str(e).lower():
+                raise
+            if attempt == 1:
+                print(f"  {Y}wait{X} another process holds the snapshot open; "
+                      f"retrying for up to 60s")
+            _t.sleep(5)
+    raise SystemExit(
+        f"\n  Could not get a write lock on {target} after 60s.\n"
+        f"  {last}\n\n"
+        f"  Something is holding it open — usually the Streamlit app with a\n"
+        f"  page left on screen. Either close those browser tabs, or:\n"
+        f"      sudo systemctl restart breakoutscanner\n"
+        f"  then run this again.")
+
+
+G, R, Y, C, X = "\033[32m", "\033[31m", "\033[33m", "\033[36m", "\033[0m"
+
+
+def db_path() -> str:
+    try:
+        from config import DATA_DIR
+        return os.path.join(str(DATA_DIR), DB_NAME)
+    except Exception:
+        d = os.path.join(HERE, "data_cache")
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, DB_NAME)
+
+
+# ── derived columns the scan registry expects ──────────────────────────────
+def _extras(bars: pd.DataFrame, m: dict) -> dict:
+    """
+    Fields scan_engine.FIELDS declares that screen.py does not produce.
+
+    ADR% is the one worth explaining: average daily range as a percentage of
+    price. It is a position-sizing input, not a signal — a stock with a 2% ADR
+    and one with a 9% ADR need completely different stop distances, and
+    treating them the same is how a "1% risk" rule quietly becomes a 4% one.
+    """
+    out = {
+        "adr_pct_5d": np.nan, "adr_pct_20d": np.nan, "atr_pct": np.nan,
+        "above_10ema": 0, "above_21ema": 0, "above_50ema": 0, "above_200ema": 0,
+        "ma_stacked": 0, "sma200_rising_months": np.nan,
+        "pct_from_52w_high": np.nan, "pct_from_52w_low": np.nan,
+        "turnover_30d_cr": np.nan, "volume_ratio": np.nan,
+        "ret_6m": np.nan, "ret_12m": np.nan,
+    }
+    if bars is None or bars.empty or "close" not in bars:
+        return out
+    c = bars["close"].astype(float).dropna()
+    if c.empty:
+        return out
+    px = float(c.iloc[-1])
+    hi, lo = bars.get("high"), bars.get("low")
+
+    if hi is not None and lo is not None and px > 0:
+        rng = (hi.astype(float) - lo.astype(float)) / c.replace(0, np.nan)
+        if len(rng.dropna()) >= 5:
+            out["adr_pct_5d"] = float(rng.iloc[-5:].mean() * 100)
+        if len(rng.dropna()) >= 20:
+            out["adr_pct_20d"] = float(rng.iloc[-20:].mean() * 100)
+        # true range includes gaps; a plain high-low understates overnight risk
+        pc = c.shift(1)
+        tr = pd.concat([hi - lo, (hi - pc).abs(), (lo - pc).abs()], axis=1).max(axis=1)
+        if len(tr.dropna()) >= 14:
+            out["atr_pct"] = float(tr.iloc[-14:].mean() / px * 100)
+
+    for n, key in ((10, "above_10ema"), (21, "above_21ema"),
+                   (50, "above_50ema"), (200, "above_200ema")):
+        if len(c) >= n:
+            out[key] = int(px > float(c.ewm(span=n, adjust=False).mean().iloc[-1]))
+
+    if len(c) >= 200:
+        s20 = float(c.iloc[-20:].mean())
+        s50 = float(c.iloc[-50:].mean())
+        s200 = float(c.iloc[-200:].mean())
+        out["ma_stacked"] = int(s20 >= s50 >= s200)
+        prev = float(c.iloc[-221:-21].mean()) if len(c) >= 221 else np.nan
+        if np.isfinite(prev):
+            out["sma200_rising_months"] = 1.0 if s200 > prev else 0.0
+
+    # The 52-week extremes must use the SAME reference as screen.py, which
+    # takes the highest HIGH and lowest LOW — not the highest close. An
+    # earlier version used closes here, so pct_from_52w_high and
+    # pct_of_52w_high were measured against different numbers and did not sum
+    # to 100. Silent, and it understated how far below the high a stock was.
+    n = min(252, len(c))
+    if hi is not None and lo is not None:
+        hi52 = float(hi.astype(float).iloc[-n:].max())
+        lo52 = float(lo.astype(float).iloc[-n:].min())
+    else:
+        hi52, lo52 = float(c.iloc[-n:].max()), float(c.iloc[-n:].min())
+    if hi52 > 0:
+        out["pct_from_52w_high"] = (hi52 - px) / hi52 * 100
+    if lo52 > 0:
+        out["pct_from_52w_low"] = (px - lo52) / lo52 * 100
+
+    if "volume" in bars and len(bars) >= 31:
+        v = bars["volume"].astype(float)
+        avg30 = float(v.iloc[-31:-1].mean())
+        out["turnover_30d_cr"] = avg30 * px / 1e7          # rupees -> crore
+        avg20 = float(v.iloc[-21:-1].mean())
+        if avg20 > 0:
+            out["volume_ratio"] = float(v.iloc[-1]) / avg20
+
+    for win, key in ((126, "ret_6m"), (252, "ret_12m")):
+        if len(c) > win:
+            prev = float(c.iloc[-win - 1])
+            if prev:
+                out[key] = (px / prev - 1.0) * 100
+    return out
+
+
+BREAKOUT_TIMEFRAMES = ("1D", "1W", "1M")
+
+
+def _breakout_caller():
+    """
+    Bind to breakout.detect_breakout WITHOUT assuming its signature.
+
+    This must call the real detector — not a reimplementation — or the new
+    app and the old scan will disagree and nobody will be able to say which
+    is right. breakout.py is SHA-identical to upstream and has the longest
+    track record of anything here; it is the thing to reuse, not rewrite.
+
+    The signature is discovered rather than assumed, so a parameter rename
+    upstream degrades to "breakout columns unavailable" instead of silently
+    passing the wrong argument.
+    """
+    import inspect
+    try:
+        import breakout
+    except Exception as e:
+        return None, f"breakout.py not importable: {e}"
+    fn = getattr(breakout, "detect_breakout", None)
+    if fn is None:
+        return None, "breakout.detect_breakout not found"
+    try:
+        params = list(inspect.signature(fn).parameters)
+    except (TypeError, ValueError):
+        params = []
+
+    def call(bars, symbol, timeframe):
+        # Mirror scanner.py's call EXACTLY (its lines 29-39):
+        #
+        #     detect_breakout(df, symbol, timeframe, mode=mode,
+        #                     vol_mult=vol_mult, lookback=lookback,
+        #                     atr_period=atr_period, atr_mult=atr_mult,
+        #                     direction_filter=direction_filter)
+        #
+        # Every one of those is Optional and defaults to None, and the app
+        # passes None EXPLICITLY. That is not the same as omitting the
+        # argument: passing None makes the detector fall back to its config,
+        # while omitting it takes the function's own default. An earlier
+        # version omitted them and found 12 breakouts where the live scan
+        # found 96 — same function, different scan.
+        kw = {}
+        if "symbol" in params:
+            kw["symbol"] = symbol
+        if "timeframe" in params:
+            kw["timeframe"] = timeframe
+        for opt in ("mode", "vol_mult", "lookback", "atr_period",
+                    "atr_mult", "direction_filter"):
+            if opt in params:
+                kw[opt] = None
+        return fn(bars, **kw)
+
+    return call, f"detect_breakout({', '.join(params) or '...'})"
+
+
+def _bars_for(symbol: str, timeframe: str, daily: pd.DataFrame):
+    """
+    Get bars the way scanner.py does — load_bars(symbol, timeframe).
+
+    NOT by resampling daily bars in pandas. scanner.py line 28 reads:
+
+        df = bars if bars is not None else load_bars(symbol, timeframe, ...)
+
+    so weekly and monthly bars come from the loader, not from aggregation.
+    Resampled bars are a different series with a different index, and the
+    detector found nothing in them — 1W and 1M both returned zero while the
+    live scan found plenty. Reusing the detector is only meaningful if it is
+    fed the same input.
+    """
+    if timeframe == "1D":
+        return daily
+    try:
+        from data_loader import load_bars
+        return load_bars(symbol, timeframe, use_cache=True)
+    except Exception:
+        return None
+
+
+def _breakout_row(call, bars: pd.DataFrame, symbol: str = "",
+                  errors: list | None = None) -> dict:
+    """
+    Run the detector on daily, weekly and monthly bars.
+
+    One row per symbol per day is the snapshot's shape, so a breakout on the
+    weekly becomes its own COLUMN rather than a second row. `is_breakout` is
+    true if any timeframe fired, which is what the old scan reports when it
+    is run with 1D, 1W and 1M ticked.
+    """
+    out = {"is_breakout": 0, "breakout_direction": "", "breakout_pct": np.nan,
+           "breakout_level": np.nan, "breakout_strong_close": 0,
+           "breakout_1d": 0, "breakout_1w": 0, "breakout_1m": 0,
+           "breakout_timeframes": "",
+           # The detector returns all of these and the snapshot used to throw
+           # them away, which is why the table view lost the Mode, Prior H/L,
+           # Bar Date, Lookback and 52W High columns the old scan showed.
+           # They cost nothing to keep — they are already computed.
+           "breakout_timeframe": "", "breakout_mode": "",
+           "breakout_prior_high": np.nan, "breakout_prior_low": np.nan,
+           "breakout_bar_time": "", "breakout_lookback": np.nan,
+           "breakout_is_52w_high": 0, "breakout_vol_ratio": np.nan}
+    if call is None or bars is None or bars.empty:
+        return out
+
+    fired = []
+    for tf in BREAKOUT_TIMEFRAMES:
+        try:
+            b = _bars_for(symbol, tf, bars)
+            if b is None or len(b) < 25:
+                continue
+            r = call(b, symbol, tf)
+        except Exception as e:
+            # Record the FIRST failure so the caller can report it once.
+            # Silently continuing here is what turned a broken call into a
+            # believable "0 breakouts today".
+            if errors is not None and len(errors) < 3:
+                errors.append(f"{symbol} {tf}: {type(e).__name__}: {e}")
+            continue
+        if not r:
+            continue
+        d = r if isinstance(r, dict) else getattr(r, "__dict__", {})
+        if not d:
+            continue
+        out[f"breakout_{tf.lower()}"] = 1
+        fired.append(tf)
+        # daily wins for the headline numbers; it is the timeframe the
+        # entry decision is actually made on
+        if tf == "1D" or not out["breakout_direction"]:
+            out["breakout_direction"] = str(d.get("direction", "") or "")
+            for src, dst in (("breakout_pct", "breakout_pct"),
+                             ("level", "breakout_level"),
+                             ("prior_high", "breakout_prior_high"),
+                             ("prior_low", "breakout_prior_low"),
+                             ("lookback", "breakout_lookback"),
+                             ("volume_ratio", "breakout_vol_ratio")):
+                v = d.get(src)
+                if v is not None:
+                    try:
+                        out[dst] = float(v)
+                    except (TypeError, ValueError):
+                        pass
+            out["breakout_strong_close"] = int(bool(d.get("strong_close")))
+            out["breakout_timeframe"] = tf
+            out["breakout_mode"] = str(d.get("mode", "") or "")
+            out["breakout_bar_time"] = str(d.get("bar_time", "") or "")[:19]
+            out["breakout_is_52w_high"] = int(bool(d.get("is_52w_high")))
+
+    out["is_breakout"] = int(bool(fired))
+    out["breakout_timeframes"] = ", ".join(fired)
+    return out
+
+
+def build(universe: str, limit: int = 0, verbose: bool = True,
+          symbols_file: str | None = None) -> pd.DataFrame:
+    import screen
+    import patterns as P
+    from data_loader import load_daily, load_bars
+
+    # ── an explicit symbol list, bypassing the index registry ──────────────
+    # Every name in INDEX_SLUGS is an NSE *benchmark*, and a benchmark is a
+    # selection by construction — the largest of them, Nifty Total Market,
+    # holds ~750 of roughly 2,000 listed equities. No combination of them
+    # reaches the rest. KSHINTL (362 -> 900 since March, breaking out on ~8x
+    # volume) is in none of them, so it was never fetched or evaluated, and
+    # no filter change could ever have surfaced it.
+    #
+    # load_index_symbols() rejects any name not in INDEX_SLUGS, so a full
+    # market list cannot be expressed as an index. This takes symbols from a
+    # plain file instead: one per line, or a CSV with a `symbol` column.
+    if symbols_file:
+        try:
+            with open(symbols_file, errors="replace") as fh:
+                raw = [ln.strip() for ln in fh if ln.strip()]
+        except OSError as e:
+            print(f"{R}  fail{X} cannot read {symbols_file}: {e}")
+            return pd.DataFrame()
+        if raw and "," in raw[0] and "symbol" in raw[0].lower():
+            import csv as _csv
+            rdr = _csv.DictReader(raw)
+            col = next((c for c in (rdr.fieldnames or [])
+                        if c.strip().lower() == "symbol"), None)
+            raw = [r[col].strip() for r in rdr if col and r.get(col)]
+        elif raw and "," in raw[0]:
+            raw = [r.split(",")[0].strip() for r in raw]
+        syms = sorted({s.upper() for s in raw if s and not s.startswith("#")})
+        if verbose:
+            print(f"  {symbols_file}: {len(syms)} symbols")
+        if not syms:
+            print(f"{R}  fail{X} {symbols_file} yielded no symbols")
+            return pd.DataFrame()
+    else:
+        try:
+            import universes
+            names = (list(universes.INDEX_REGISTRY) if universe == "all"
+                     else [universe])
+            syms: list[str] = []
+            for n in names:
+                got = universes.load_index_symbols(n)
+                if verbose:
+                    print(f"  {n}: {len(got)} symbols")
+                syms += got
+            syms = sorted(dict.fromkeys(syms))
+        except Exception as e:
+            print(f"{R}  fail{X} universe load: {e}")
+            return pd.DataFrame()
+
+    # ── skip symbols already known to have no data ─────────────────────────
+    # build() calls load_daily once per timeframe, so a symbol the data source
+    # does not carry costs THREE failed lookups per run, each waiting out a
+    # network timeout. On a 300-symbol slice that was 31 symbols = 93 round
+    # trips spent confirming what no_data.json already recorded.
+    #
+    # They are skipped here but NOT forgotten: they still appear in the
+    # coverage arithmetic as known-unavailable, and prefetch.py still asks for
+    # them in its batched pass. So a stock that starts being carried comes
+    # back on its own, while the build stops paying for the question.
+    # ── skip what prefetch proved is unobtainable ──────────────────────────
+    # prefetch.py asks for every symbol in batched requests and writes
+    # prefetch_no_data.txt for the ones the source returns nothing for. That
+    # is evidence from the component that owns fetching, refreshed on every
+    # prefetch run, so a symbol that starts being carried leaves the list by
+    # itself.
+    #
+    # This replaces a strike counter in no_data.json which could never fire:
+    # it was rebuilt each run from symbols that FAILED, so a symbol the skip
+    # actually skipped stopped failing, dropped out of the map, and was
+    # un-skipped next run. Every value sat at 1 for ever.
+    #
+    # Cost of not skipping: build() calls load_daily once per timeframe, so
+    # each unobtainable symbol is three lookups that each wait out a network
+    # timeout. On 300 symbols that was 31 x 3 = 93 pointless round trips.
+    _skipped_no_data = 0
+    try:
+        _ndp = os.path.join(os.path.dirname(db_path()), "prefetch_no_data.txt")
+        with open(_ndp) as _fh:
+            _skip = {l.strip().upper() for l in _fh
+                     if l.strip() and not l.startswith("#")}
+        if _skip:
+            _before = len(syms)
+            syms = [s for s in syms if s.upper() not in _skip]
+            _skipped_no_data = _before - len(syms)
+            if verbose and _skipped_no_data:
+                print(f"  skipping {_skipped_no_data} symbol(s) prefetch found "
+                      f"no data for (it retries them on its next run)")
+    except FileNotFoundError:
+        if verbose:
+            print("  no prefetch_no_data.txt yet — run prefetch.py to build it")
+    except Exception:
+        pass
+
+    if limit:
+        syms = syms[:limit]
+    if not syms:
+        print(f"{R}  fail{X} no symbols — run universes.py first")
+        return pd.DataFrame()
+
+    nifty = load_bars("NIFTY", "1D", use_cache=True)
+    bench3 = screen.nifty_return(nifty)
+    bench1 = screen.nifty_return(nifty, window=screen.RET_1M_WINDOW)
+
+    try:
+        import sectors
+        smap = sectors.sector_map()
+    except Exception:
+        smap = {}
+    try:
+        import universes as _u
+        imap = _u.industry_map()
+    except Exception:
+        imap = {}
+
+    bo_call, bo_desc = _breakout_caller()
+    if verbose:
+        print(f"  breakout detector: {bo_desc}")
+
+    bo_errors: list[str] = []
+    # NAME the skips, do not merely count them.
+    #
+    # "19 skipped" is unfalsifiable. A stock absent because its download failed
+    # looks exactly like a stock absent because it had no setup — and the goal
+    # here is not to miss anything, which makes an anonymous count the one
+    # number that cannot be checked. Yahoo rate-limited a symbol during a
+    # diagnostic run in this very session; at scale that silently removes
+    # stocks from a snapshot that still looks complete.
+    skipped: list[tuple[str, str]] = []
+    # Last bar date per symbol, so the build can report the age of what it
+    # actually used rather than assuming the cache was current.
+    _last_bar: dict = {}
+    rows, t0, failed = [], time.time(), 0
+    for i, s in enumerate(syms, 1):
+        if verbose and i % 25 == 0:
+            el = time.time() - t0
+            print(f"  {i}/{len(syms)}  {el:5.0f}s  "
+                  f"eta {el / i * (len(syms) - i):4.0f}s", flush=True)
+        try:
+            bars = load_daily(s, use_cache=True)
+        except Exception as e:
+            failed += 1
+            skipped.append((s, f"download: {type(e).__name__}: {str(e)[:60]}"))
+            continue
+        if bars is None or bars.empty:
+            failed += 1
+            skipped.append((s, "no bars returned"))
+            continue
+        try:
+            m = screen.compute_metrics(bars, bench3, index_bars=nifty,
+                                       bench_return_1m=bench1)
+            m.update(_extras(bars, m))
+            m.update(P.compute_patterns(bars, nifty))
+            m.update(_breakout_row(bo_call, bars, s, bo_errors))
+        except Exception as e:
+            failed += 1
+            skipped.append((s, f"compute: {type(e).__name__}: {str(e)[:60]}"))
+            continue
+        try:
+            _last_bar[s] = bars.index[-1].date()
+        except Exception:
+            pass
+        m["symbol"] = s
+        m["sector"] = smap.get(s.upper(), "")
+        m["industry"] = imap.get(s.upper(), "")
+        m["basic_industry"] = m["industry"]     # NSE's finer level, when available
+        m["last_bar_date"] = str(_last_bar.get(s, ""))
+        rows.append(m)
+        del bars                                 # release before the next symbol
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+
+    # ── did this stock actually trade on the day the snapshot describes? ───
+    # Every row is stamped with the build date, but an illiquid stock may not
+    # print a bar that day: 326 of 3,046 on the full NSE universe. Without
+    # this flag a stock that broke out on Wednesday and has not traded since
+    # is served under "broke out today", which is wrong rather than merely
+    # late. The reference is the NEWEST bar seen across the universe, not
+    # today's calendar date, so weekends and market holidays need no special
+    # handling — the market itself defines the latest trading day.
+    if _last_bar:
+        _ref = max(_last_bar.values())
+        df["traded_today"] = df["symbol"].map(
+            lambda s: _last_bar.get(s) == _ref)
+        _n_stale = int((~df["traded_today"]).sum())
+        if verbose and _n_stale:
+            print(f"  {Y}note{X}  {_n_stale} symbol(s) did not trade on {_ref} "
+                  f"— flagged traded_today = false")
+    else:
+        df["traded_today"] = True
+
+    # ── index membership: scan once, filter many ───────────────────────────
+    # Nifty 100, Midcap 150, Smallcap 250 and Microcap 250 are all SUBSETS of
+    # the full NSE list this snapshot already covers. Re-scanning any of them
+    # would be re-doing work already done — so membership is recorded as
+    # columns and every index view becomes a WHERE clause instead of a scan.
+    #
+    # cap_band uses NSE's own classification rather than market_cap_cr, which
+    # is NULL for every row because the data source does not supply shares
+    # outstanding. Index membership IS the cap definition your broker and
+    # every fund manager uses, and unlike market cap it is complete: the
+    # ~2,500 stocks in none of them get an honest name of their own instead
+    # of a blank.
+    _BANDS = [("in_nifty100", "NIFTY 100", "Large"),
+              ("in_midcap150", "NIFTY Midcap 150", "Mid"),
+              ("in_smallcap250", "NIFTY Smallcap 250", "Small"),
+              ("in_microcap250", "NIFTY Microcap 250", "Micro")]
+    try:
+        import universes as _u
+        _sym = df["symbol"].astype(str).str.upper()
+        _sets = {}
+        for col, name, _lab in _BANDS:
+            try:
+                _sets[col] = {str(s).upper() for s in _u.load_index_symbols(name)}
+            except Exception:
+                _sets[col] = set()
+            df[col] = _sym.isin(_sets[col])
+        try:
+            _tm = {str(s).upper() for s in
+                   _u.load_index_symbols("NIFTY Total Market")}
+        except Exception:
+            _tm = set()
+        df["in_totalmarket"] = _sym.isin(_tm)
+
+        def _band(s: str) -> str:
+            s = s.upper()
+            for col, _name, lab in _BANDS:
+                if s in _sets.get(col, ()):
+                    return lab
+            return "Below Microcap"
+
+        df["cap_band"] = _sym.map(_band)
+        if verbose:
+            _c = df["cap_band"].value_counts().to_dict()
+            print("  cap bands: " + ", ".join(
+                f"{k} {v}" for k, v in sorted(_c.items(), key=lambda kv: -kv[1])))
+    except Exception as e:
+        if verbose:
+            print(f"  {Y}warn{X} index membership unavailable ({e}); "
+                  f"cap_band left blank")
+        for col, _n, _l in _BANDS:
+            df[col] = False
+        df["in_totalmarket"] = False
+        df["cap_band"] = ""
+
+    for fn in (screen.add_ret_1m_rank, screen.add_rs_rank, screen.add_rs_rating):
+        try:
+            df = fn(df)
+        except Exception:
+            pass
+    try:
+        df = screen.add_trend_template(
+            df, lambda s: load_daily(s, use_cache=True))
+    except Exception:
+        pass
+
+    # scan_engine expects percentages; screen.py returns fractions
+    for src, dst in (("ret_1m", "ret_1m"), ("ret_3m", "ret_3m")):
+        if src in df.columns and df[src].abs().max() is not np.nan:
+            if df[src].abs().max() <= 5:            # still a fraction
+                df[dst] = df[src] * 100.0
+    if "price" in df.columns and "close" not in df.columns:
+        df["close"] = df["price"]
+
+    # ── separate "supplier has no data" from "something broke" ─────────────
+    # 255 of 559 SME listings simply are not carried by the price source. That
+    # is permanent and known. Counting them as missing pins coverage at ~92%
+    # for ever, and a permanent 8% hole is the perfect hiding place: the day
+    # 200 main-board stocks start failing, the number moves to 87% and looks
+    # like the usual noise.
+    #
+    # So a symbol is "known unavailable" only after NO_DATA_STRIKES consecutive
+    # failures, and coverage is measured against what is actually obtainable.
+    # One good run resets a symbol, so a stock that starts being carried
+    # rejoins immediately, and a NEW failure is always visible on the run it
+    # first happens — before it can be absorbed into the known set.
+    NO_DATA_STRIKES = 3
+    import json as _json
+    _nd = os.path.join(os.path.dirname(db_path()), "no_data.json")
+    try:
+        with open(_nd) as _fh:
+            _prior = _json.load(_fh)
+    except Exception:
+        _prior = {}
+    _failed_now = {s for s, _ in skipped}
+    _counts = {s: int(_prior.get(s, 0)) + 1 for s in _failed_now}
+    # Carry forward symbols that were SKIPPED rather than attempted. Without
+    # this the map only ever contains this run's failures, so anything the
+    # skip removed silently disappears from the record and the counts reset.
+    _attempted = set(syms)
+    for _s, _n in _prior.items():
+        if _s not in _counts and _s not in _attempted:
+            _counts[_s] = int(_n)
+    _known = {s for s, n in _counts.items() if n >= NO_DATA_STRIKES}
+    _new_fail = sorted(s for s in _failed_now if _counts.get(s, 0) == 1)
+    try:
+        with open(_nd, "w") as _fh:
+            _json.dump(_counts, _fh, indent=1, sort_keys=True)
+    except OSError:
+        pass
+    # Only symbols this run ATTEMPTED can reduce the denominator. Symbols
+    # the prefetch skip removed are not in `syms` at all, so subtracting them
+    # here counted them twice and produced 300 of 296 = 101.4%.
+    _known_here = {s for s in _known if s in _attempted}
+    _obtainable = max(len(syms) - len(_known_here), 1)
+
+    if verbose:
+        cov = 100.0 * len(df) / _obtainable
+        raw_cov = 100.0 * len(df) / max(len(syms), 1)
+        tag = G if cov >= 98 else (Y if cov >= 95 else R)
+        print(f"  {tag}ok{X}  {len(df)} of {_obtainable} obtainable symbols "
+              f"({cov:.1f}% coverage), {failed} skipped, "
+              f"{time.time() - t0:.0f}s")
+        if _known:
+            print(f"        {len(_known)} known-unavailable excluded "
+                  f"(no data for {NO_DATA_STRIKES}+ runs); "
+                  f"raw coverage {raw_cov:.1f}% of {len(syms)}")
+        if _new_fail:
+            # The number that actually deserves attention.
+            print(f"  {Y}new{X}   {len(_new_fail)} symbol(s) failed for the "
+                  f"FIRST time: {', '.join(_new_fail[:10])}"
+                  f"{' ...' if len(_new_fail) > 10 else ''}")
+        if skipped:
+            # Written out so a bad night is diffable against a good one.
+            # Coverage that quietly degrades is the failure this whole
+            # exercise exists to prevent: the snapshot still looks complete.
+            try:
+                p = os.path.join(os.path.dirname(db_path()), "skipped.txt")
+                with open(p, "w") as fh:
+                    for s, why in skipped:
+                        fh.write(f"{s}\t{why}\n")
+                print(f"        skipped symbols written to {p}")
+            except OSError:
+                pass
+            from collections import Counter
+            reasons = Counter(w.split(":")[0] for _s, w in skipped)
+            for why, n in reasons.most_common():
+                print(f"        {n:>4}  {why}")
+            print(f"        e.g. {', '.join(s for s, _ in skipped[:8])}")
+        # How current is the data we just used? The cache is allowed to be
+        # up to three days old by load_daily, so "built successfully" and
+        # "built from today's prices" are different claims. Stale input was
+        # what turned 22 monthly breakouts into 1, with no error anywhere.
+        if _last_bar:
+            _newest = max(_last_bar.values())
+            _behind = {s: d for s, d in _last_bar.items() if d < _newest}
+            print(f"        data as of {_newest}"
+                  + (f", {len(_behind)} symbol(s) behind it" if _behind else
+                     " for every symbol"))
+            if _behind:
+                _worst = min(_behind.values())
+                _pct = 100.0 * len(_behind) / max(len(_last_bar), 1)
+                _tag = R if _pct > 10 else Y
+                print(f"  {_tag}stale{X} {len(_behind)} symbol(s) "
+                      f"({_pct:.0f}%) use prices older than {_newest}, "
+                      f"oldest {_worst}")
+                if _pct > 30:
+                    # Above roughly a third, this stops looking like normal
+                    # illiquidity and starts looking like a pipeline problem.
+                    print(f"        More than a third of the universe is "
+                          f"behind. That is unlikely to be illiquidity — "
+                          f"check that prefetch.py ran before this build.")
+                else:
+                    # The common case, and the earlier wording here was wrong.
+                    # It told you to run prefetch; prefetch HAD run. These
+                    # stocks simply did not print a bar — an illiquid name
+                    # does not trade every session, and no amount of fetching
+                    # creates a bar the exchange never produced.
+                    print(f"        Normal for illiquid names: they did not "
+                          f"trade, so no bar exists. All are flagged "
+                          f"traded_today = false and excluded from 'today' "
+                          f"screens by default.")
+                    for _s, _d in sorted(_behind.items(), key=lambda kv: kv[1])[:8]:
+                        print(f"          {_s:<14} {_d}")
+        if cov < 95:
+            print(f"  {R}WARN{X} coverage below 95% — this snapshot is NOT the "
+                  f"whole market. Check {os.path.dirname(db_path())}/skipped.txt "
+                  f"before trusting an empty scan result.")
+        if "is_breakout" in df.columns:
+            n = int(df["is_breakout"].sum())
+            d = df["breakout_direction"].astype(str).str.lower()
+            bull = int((df["is_breakout"].astype(bool) & d.str.startswith("bull")).sum())
+            bear = int((df["is_breakout"].astype(bool) & d.str.startswith("bear")).sum())
+            if n == 0 and bo_errors:
+                print(f"  {R}FAIL{X} the detector never ran successfully:")
+                for e in bo_errors:
+                    print(f"        {e}")
+                print(f"        Zero breakouts here means BROKEN, not none.")
+            print(f"  {G}ok{X}  breakouts: {n} total · {bull} bullish · {bear} bearish")
+            _tf_counts = {}
+            for tf in ("1d", "1w", "1m"):
+                c = f"breakout_{tf}"
+                if c in df.columns:
+                    _tf_counts[tf.upper()] = int(df[c].sum())
+                    print(f"        {tf.upper()}: {_tf_counts[tf.upper()]}")
+
+            # A SINGLE timeframe at zero is as impossible as all of them.
+            #
+            # The total-is-zero check below has existed for a while. This one
+            # did not, and it cost real time: after the cache fix the monthly
+            # path silently returned 1M: 0 across 3,046 stocks, because the
+            # cache held ~400 days, which resamples to ~19 monthly bars, and
+            # the detector's monthly lookback is 20. Nineteen bars cannot
+            # contain a 20-bar breakout, so every symbol returned nothing.
+            #
+            # It printed as an ordinary line in a list of three. Over a whole
+            # market, one timeframe finding nothing while the others find
+            # hundreds means the data feeding it is too short — not that the
+            # market was quiet.
+            _dead = [k for k, v in _tf_counts.items() if v == 0]
+            _live = [k for k, v in _tf_counts.items() if v > 0]
+            # 1,000 rather than a couple of hundred: a --limit run over the
+            # alphabetically-first few hundred symbols is nearly all tiny SME
+            # names, and one timeframe finding nothing there is believable. At
+            # full-market size it is not.
+            if _dead and _live and len(df) > 1000:
+                print(f"  {R}FAIL{X} {', '.join(_dead)} found ZERO breakouts "
+                      f"while {', '.join(_live)} found "
+                      f"{'/'.join(str(_tf_counts[k]) for k in _live)}.")
+                print(f"        Across {len(df)} stocks that is not a quiet "
+                      f"market — it means the series feeding "
+                      f"{', '.join(_dead)} is too short for its lookback.")
+                print(f"        Most likely the price cache lacks depth: run")
+                print(f"          prefetch.py --apply --app <this app dir>")
+                print(f"        and rebuild. Check the FIRST line of prefetch's "
+                      f"output names the app you intend.")
+            print(f"        Compare these against your live scan. They call the")
+            print(f"        SAME detect_breakout(), so they should agree exactly.")
+    return df
+
+
+def write(df: pd.DataFrame, path: str, as_of: str | None = None) -> int:
+    """
+    Replace today's rows, keep history.
+
+    History is the point: a scanner's honest backtest is 'what did this scan
+    return on each past day, and what happened next'. That is only possible if
+    past runs were stored. Deleting and rewriting the whole table each night
+    would make every backtest claim unverifiable.
+    """
+    import scan_engine as SE
+    as_of = as_of or pd.Timestamp.today().strftime("%Y-%m-%d")
+
+    cols = {"date": "VARCHAR"}
+    for name, f in SE.FIELDS.items():
+        cols[f.column] = SQL_TYPES[f.kind]
+
+    conn = connect(path)
+    conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE} "
+                 f"({', '.join(f'{c} {t}' for c, t in cols.items())}, "
+                 f"PRIMARY KEY (date, symbol))")
+
+    # ── migrate ────────────────────────────────────────────────────────────
+    # CREATE TABLE IF NOT EXISTS does nothing to a table that already exists,
+    # so a snapshot built before a field was registered keeps the old shape
+    # and the next INSERT fails with a column-count mismatch. Registering a
+    # new field in scan_engine.FIELDS must be all it takes; the store adapts.
+    have = {r[0] for r in conn.execute(f"DESCRIBE {TABLE}").fetchall()}
+    added = [c for c in cols if c not in have]
+    for c in added:
+        conn.execute(f"ALTER TABLE {TABLE} ADD COLUMN {c} {cols[c]}")
+    if added:
+        print(f"  {G}ok{X}  schema migrated: added {', '.join(added)}")
+        print(f"       (existing rows carry NULL there — rebuild those dates "
+              f"to fill them)")
+
+    out = pd.DataFrame({"date": as_of}, index=df.index)
+    for name, f in SE.FIELDS.items():
+        if f.column == "symbol":
+            out["symbol"] = df.get("symbol", "")
+            continue
+        # Always a Series, never a scalar: a registry column the compute step
+        # did not produce still needs a full column of NULLs, or the snapshot
+        # silently loses a field the scan engine believes exists.
+        v = (df[f.column] if f.column in df.columns
+             else pd.Series(np.nan, index=df.index, dtype="float64"))
+        if f.kind == "bool":
+            out[f.column] = pd.to_numeric(v, errors="coerce").fillna(0).astype(bool)
+        elif f.kind == "int":
+            # "Int64" (capital I) is pandas' NULLABLE integer. Plain int64
+            # cannot hold NA, which is why this used to be .fillna(0) — and
+            # that turned "not computable" into "worst possible score".
+            #
+            # KSHINTL listed in Dec 2025, so it has 159 bars and no 12-month
+            # history. RS Rating is legitimately NaN. It was stored as 0, and
+            # 0 is a rating: it says weakest in the market, about a stock up
+            # 49.7% in three months. Across the snapshot that was 676 rows at
+            # rs_rating = 0 with ZERO nulls, 54 of them up more than 20% in a
+            # quarter.
+            #
+            # The damage was not cosmetic. `★ Daily Screen` requires
+            # rs_rating >= 80, so every recent listing was silently excluded
+            # from the headline screen — the newly-listed, fast-moving names
+            # this whole universe expansion existed to surface.
+            out[f.column] = pd.to_numeric(v, errors="coerce").astype("Int64")
+        elif f.kind == "num":
+            out[f.column] = pd.to_numeric(v, errors="coerce")
+        else:
+            out[f.column] = v.fillna("").astype(str)
+
+    conn.execute(f"DELETE FROM {TABLE} WHERE date = ?", [as_of])
+    conn.register("incoming", out[list(cols)])
+    # Name every column explicitly rather than SELECT *. Positional insertion
+    # is correct only while the table's column ORDER matches the registry's,
+    # which stops being true the moment a field is added mid-dictionary and
+    # migration appends it at the end.
+    names = ", ".join(cols)
+    conn.execute(f"INSERT INTO {TABLE} ({names}) SELECT {names} FROM incoming")
+    conn.unregister("incoming")
+
+    derive(conn, as_of)
+
+    n = conn.execute(f"SELECT count(*) FROM {TABLE} WHERE date=?",
+                     [as_of]).fetchone()[0]
+    days = conn.execute(f"SELECT count(DISTINCT date) FROM {TABLE}").fetchone()[0]
+    conn.close()
+    print(f"  {G}ok{X}  wrote {n} rows for {as_of}  ({days} day(s) of history)")
+    return n
+
+
+def derive(conn, as_of: str) -> None:
+    """
+    Universe-relative columns, computed in SQL.
+
+    This is the reason for DuckDB. `sector_breadth_rs80` is the metric the
+    reference product ranks sectors by — "23% of Power names are above RS 80"
+    — and it is a fundamentally better question than the average return,
+    because an index can be dragged up by two heavyweights while most of its
+    constituents fall.
+
+    In pandas this is read-everything-out, group, rank, write-back. Here it is
+    one statement against data that never leaves the file.
+    """
+    conn.execute(f"""
+        UPDATE {TABLE} AS t
+        SET sector_breadth_rs80 = b.pct
+        FROM (
+            SELECT date, sector,
+                   100.0 * COUNT(*) FILTER (WHERE rs_rating >= 80) / COUNT(*) AS pct
+            FROM {TABLE}
+            WHERE date = ? AND sector IS NOT NULL AND sector <> ''
+            GROUP BY date, sector
+            HAVING COUNT(*) >= 3      -- a 2-stock 'sector' is one stock's noise
+        ) AS b
+        WHERE t.date = b.date AND t.sector = b.sector AND t.date = ?
+    """, [as_of, as_of])
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--universe", default="NIFTY Smallcap 250",
+                    help='index segment name, or "all"')
+    ap.add_argument("--limit", type=int, default=0, help="first N symbols only")
+    ap.add_argument("--date", default=None, help="override the snapshot date")
+    ap.add_argument("--symbols-file", default=None,
+                    help="scan this explicit symbol list instead of an index "
+                         "(one per line, or CSV with a `symbol` column). "
+                         "Use for the full NSE market, which no index covers.")
+    a = ap.parse_args()
+
+    label = a.symbols_file or a.universe
+    print(f"\n{C}== building snapshot: {label} =={X}")
+    df = build(a.universe, limit=a.limit, symbols_file=a.symbols_file)
+    if df.empty:
+        print(f"{R}  fail{X} nothing computed")
+        return 2
+
+    path = db_path()
+    write(df, path, as_of=a.date)
+    print(f"       {path}")
+
+    import scan_engine as SE
+    conn = connect(path, read_only=True)
+    print(f"\n{C}  predefined scanners against this snapshot:{X}")
+    for name in list(SE.PREDEFINED)[:12]:
+        try:
+            n = len(SE.run_scan(conn, SE.PREDEFINED[name], table=TABLE))
+            print(f"    {name:<32} {n:>4}")
+        except Exception as e:
+            print(f"    {name:<32} {R}err{X} {str(e)[:40]}")
+    conn.close()
+    print(f"\n  Open the Screener page in the app to query it interactively.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

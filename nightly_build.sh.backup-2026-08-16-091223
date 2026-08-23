@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+#
+# nightly_build.sh — refresh the universe, rebuild the snapshot, record what
+# happened. This is what cron runs.
+#
+#     sudo -u breakout bash /opt/breakoutscanner/nightly_build.sh
+#
+# Writes:
+#   logs/snapshot-YYYY-MM-DD.log     full output, kept 14 days
+#   data_cache/last_build.json       machine-readable status for the UI banner
+#
+# WHY A WRAPPER AND NOT A BARE CRON LINE
+# --------------------------------------
+# A cron entry that just calls build_snapshot.py fails invisibly: cron mails
+# output to a local mailbox nobody reads, and the app carries on serving the
+# previous snapshot as though nothing happened. Stale data looks exactly like
+# fresh data on screen.
+#
+# So this records the OUTCOME of every attempt, separately from the snapshot
+# itself. That distinction matters: "no build ran" and "a build ran and
+# failed" both leave an old snapshot, but they need different fixes, and the
+# banner can only tell you which if something wrote it down.
+#
+# LOCKING
+# -------
+# flock, because two concurrent builds fight over the DuckDB write lock. That
+# happened by hand during development — a second run was started while the
+# first was still going, and both wrote to the same log, producing interleaved
+# progress that read as one confusing run.
+
+set -o nounset
+set -o pipefail
+
+APP=/opt/breakoutscanner
+PY="$APP/.venv/bin/python"
+SYMS="$APP/nse_all_equity.txt"
+LOGDIR="$APP/logs"
+STATUS="$APP/data_cache/last_build.json"
+LOCK="/tmp/breakout-nightly.lock"
+KEEP_DAYS=14
+
+mkdir -p "$LOGDIR"
+LOG="$LOGDIR/snapshot-$(date +%F).log"
+
+# ── one at a time ──────────────────────────────────────────────────────────
+exec 9>"$LOCK"
+if ! flock -n 9; then
+    echo "$(date -Is)  another build holds the lock; exiting" >> "$LOG"
+    exit 0
+fi
+
+started=$(date -Is)
+start_epoch=$(date +%s)
+echo "=== nightly build started $started ===" >> "$LOG"
+
+write_status() {
+    # $1 ok|failed  $2 message  $3 rows  $4 coverage
+    cat > "$STATUS" <<EOF
+{
+  "status": "$1",
+  "message": "$2",
+  "rows": ${3:-0},
+  "coverage_pct": ${4:-0},
+  "started": "$started",
+  "finished": "$(date -Is)",
+  "seconds": $(( $(date +%s) - start_epoch )),
+  "log": "$LOG"
+}
+EOF
+}
+
+# ── 1. refresh the tradeable universe ──────────────────────────────────────
+# New listings appear continuously; a universe frozen on the day it was built
+# starts missing stocks immediately, which is the problem this whole exercise
+# was about. build_nse_universe.py refuses to write an implausible list, so a
+# bad fetch leaves the previous file intact rather than truncating it.
+echo "--- refreshing universe ---" >> "$LOG"
+if ! "$PY" "$APP/build_nse_universe.py" --apply >> "$LOG" 2>&1; then
+    echo "universe refresh FAILED — continuing with the existing list" >> "$LOG"
+fi
+
+if [[ ! -s $SYMS ]]; then
+    write_status failed "symbol list $SYMS is missing or empty" 0 0
+    echo "FATAL: no symbol list" >> "$LOG"
+    exit 2
+fi
+nsyms=$(grep -cv '^#' "$SYMS")
+echo "universe: $nsyms symbols" >> "$LOG"
+
+# ── 1b. refresh the price cache, in batches ────────────────────────────────
+# This must run BEFORE the build, and the reason is not speed.
+#
+# load_daily() accepts a cache up to three days old as "fresh". While the
+# cache was unreadable that never mattered — every read threw and the code
+# fell through to the network. Now that it reads, a build with a stale cache
+# silently computes on old bars: on 14 Aug that turned 22 monthly breakouts
+# into 1, with no error anywhere, because RELIANCE and TCS were served the
+# 13th's prices in a snapshot labelled the 14th.
+#
+# prefetch pulls ~100 symbols per request instead of one, so this costs a few
+# minutes and removes that whole class of wrong answer. A failure here is not
+# fatal — the build still runs, and its staleness report will say how old the
+# data was.
+if [[ -x "$PY" && -f "$APP/prefetch.py" ]]; then
+    echo "--- prefetching price cache ---" >> "$LOG"
+    if ! "$PY" "$APP/prefetch.py" --apply --symbols-file "$SYMS" >> "$LOG" 2>&1; then
+        echo "prefetch FAILED — building anyway; watch the staleness report" >> "$LOG"
+    fi
+else
+    echo "prefetch.py not present — skipping (staleness risk)" >> "$LOG"
+fi
+
+# ── 2. rebuild the snapshot ────────────────────────────────────────────────
+echo "--- building snapshot ---" >> "$LOG"
+if ! "$PY" "$APP/build_snapshot.py" --symbols-file "$SYMS" >> "$LOG" 2>&1; then
+    write_status failed "build_snapshot.py exited non-zero" 0 0
+    echo "=== FAILED ===" >> "$LOG"
+    exit 3
+fi
+
+# ── 3. what actually landed ────────────────────────────────────────────────
+# Read the DATABASE, not the log. The log says what the build believed; the
+# database says what a user will actually see, and only the second one matters.
+read -r rows asof < <("$PY" - <<'PYEOF' 2>/dev/null
+import sys
+sys.path.insert(0, "/opt/breakoutscanner")
+try:
+    from build_snapshot import TABLE, connect, db_path
+    c = connect(db_path(), read_only=True)
+    d = c.execute(f"SELECT max(date) FROM {TABLE}").fetchone()[0]
+    n = c.execute(f"SELECT count(*) FROM {TABLE} WHERE date = ?", [d]).fetchone()[0]
+    print(n, d)
+except Exception:
+    print(0, "none")
+PYEOF
+)
+rows=${rows:-0}
+asof=${asof:-none}
+cov=0
+if [[ $nsyms -gt 0 && $rows -gt 0 ]]; then
+    cov=$(( 100 * rows / nsyms ))
+fi
+echo "wrote $rows rows for $asof  (${cov}% of $nsyms)" >> "$LOG"
+
+if [[ $rows -eq 0 ]]; then
+    write_status failed "snapshot has no rows" 0 0
+    exit 4
+elif [[ $cov -lt 95 ]]; then
+    # Not a hard failure — a usable snapshot with a hole in it. Recorded so
+    # the UI can say so, because a thin snapshot answers every query happily
+    # and simply omits whatever it never fetched.
+    write_status degraded "only ${cov}% of the universe was built" "$rows" "$cov"
+    echo "=== DEGRADED: ${cov}% coverage ===" >> "$LOG"
+else
+    write_status ok "built $rows rows for $asof" "$rows" "$cov"
+    echo "=== OK ===" >> "$LOG"
+fi
+
+# ── 4. log rotation ────────────────────────────────────────────────────────
+find "$LOGDIR" -name 'snapshot-*.log' -mtime +$KEEP_DAYS -delete 2>/dev/null
+
+echo "=== finished $(date -Is) ===" >> "$LOG"
+exit 0

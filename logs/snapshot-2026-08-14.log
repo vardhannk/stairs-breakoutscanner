@@ -1,0 +1,1334 @@
+=== nightly build started 2026-08-14T12:13:34+00:00 ===
+--- refreshing universe ---
+
+[36m==================================================================
+== 1. fetching every NSE instrument
+==================================================================[0m
+  [32mok  [0m 114,851 instruments in the dump
+
+  everything Kite tags segment=NSE instrument_type=EQ,
+  broken down by SERIES (the suffix after the hyphen):
+
+    SG                     4298   [33mdropped (debt/other)[0m
+    EQ (no suffix)         2806   [32mKEPT[0m
+    N0                      976   [33mdropped (debt/other)[0m
+    SM                      426   [32mKEPT[0m
+    BE                      252   [32mKEPT[0m
+    ST                      133   [32mKEPT[0m
+    GS                      130   [33mdropped (debt/other)[0m
+    N1                      107   [33mdropped (debt/other)[0m
+    TB                       84   [33mdropped (debt/other)[0m
+    SF                       50   [33mdropped (debt/other)[0m
+    GB                       45   [33mdropped (debt/other)[0m
+    N2                       37   [33mdropped (debt/other)[0m
+    N3                       29   [33mdropped (debt/other)[0m
+    BZ                       28   [32mKEPT[0m
+
+  [1m3,307 equities kept, 6,256 dropped[0m
+
+  KSHINTL present: [1mTrue[0m
+  sample: 20MICRONS, 21STCENMGM, 360ONE, 3BBLACKBIO, 3IINFOLTD, 3MINDIA, 3PLAND, 5PAISA, 63MOONS, A2ZINFRA ...
+
+[36m==================================================================
+== 2. how much is currently invisible
+==================================================================[0m
+  5 index list(s) consulted (excluding 'NSE All Equity' itself)
+  scannable today      752
+  [1mnewly scannable      2,557[0m
+
+  a few that were invisible: 20MICRONS, 21STCENMGM, 3BBLACKBIO, 3IINFOLTD, 3PLAND, 5PAISA, 63MOONS, A2ZINFRA, AAATECH, AAKAAR, AAKASH, AARADHYA ...
+
+  [33m2 symbol(s) are in your NIFTY indices but NOT in the equity dump:[0m
+    DUMMYINXGN, DUMMYTRVN
+  [32madded them — the universe is now a strict superset of the tradeable names you scan today[0m
+
+[36m==================================================================
+== 3. output
+==================================================================[0m
+  /opt/breakoutscanner/nse_all_equity.txt
+  [32mok  [0m wrote 3,309 symbols (27,456 bytes)
+  [32mok  [0m re-read cleanly; KSHINTL is in the list
+
+[36m==================================================================
+== next
+==================================================================[0m
+  Try a slice first — 2,000 symbols on a 512 MB box is a real risk:
+
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+      /opt/breakoutscanner/build_snapshot.py \
+      --symbols-file /opt/breakoutscanner/nse_all_equity.txt --limit 300
+
+  If that completes, drop --limit for the full run. Watch it the first
+  time. [33mAn OOM kill stops it mid-build, and a truncated snapshot is the
+  silent-wrong failure we have spent this session removing.[0m
+
+  Then confirm the stock that started this:
+
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+      /opt/breakoutscanner/diagnose_symbol.py KSHINTL
+universe: 3309 symbols
+--- prefetching price cache ---
+$ADISOFT.NS: possibly delisted; no timezone found
+$AARADHYA.NS: possibly delisted; no timezone found
+$AESTHETIK.NS: possibly delisted; no timezone found
+$ABHAPOWER.NS: possibly delisted; no timezone found
+$ACTIVEINFR.NS: possibly delisted; no timezone found
+$ADDICTIVE.NS: possibly delisted; no timezone found
+$ACCPL.NS: possibly delisted; no timezone found
+$AERON.NS: possibly delisted; no timezone found
+$ACETEC.NS: possibly delisted; no timezone found
+$AAKAAR.NS: possibly delisted; no timezone found
+
+10 Failed downloads:
+['ADISOFT.NS', 'AARADHYA.NS', 'AESTHETIK.NS', 'ABHAPOWER.NS', 'ACTIVEINFR.NS', 'ADDICTIVE.NS', 'ACCPL.NS', 'AERON.NS', 'ACETEC.NS', 'AAKAAR.NS']: possibly delisted; no timezone found
+  [33mwarn[0m --app points at the ORIGINAL app, not the lab.
+  [33mwarn[0m That is allowed but not the default. Ctrl-C now if unintended.
+
+[36m==================================================================
+== 1. wiring  (/opt/breakoutscanner)
+==================================================================[0m
+  [32mok  [0m yfinance 1.5.2, pandas 2.3.3
+  [32mok  [0m cache dir /opt/breakoutscanner/data_cache/prices_daily
+  [32mok  [0m yahoo_ticker and _normalize_ohlcv available
+  [32mok  [0m 3,309 symbols from nse_all_equity.txt
+
+  window     2020-01-19 -> 2026-08-15  (2400 calendar days)
+  batches    34 x 100
+  [1mvs the current path: 3,309 serialised requests[0m
+
+[36m==================================================================
+== 2. fetching
+==================================================================[0m
+  100/3309     15s  eta  484s
+$ALCODIS.NS: possibly delisted; no timezone found
+$AMCL.NS: possibly delisted; no timezone found
+$AGARWALTUF.NS: possibly delisted; no timezone found
+$ANONDITA.NS: possibly delisted; no timezone found
+$AKANKSHA.NS: possibly delisted; no timezone found
+$AMBANIORGO.NS: possibly delisted; no timezone found
+$AMBAAUTO.NS: possibly delisted; no timezone found
+$ANYA.NS: possibly delisted; no timezone found
+$ANAWIL.NS: possibly delisted; no timezone found
+
+9 Failed downloads:
+['ALCODIS.NS', 'AMCL.NS', 'AGARWALTUF.NS', 'ANONDITA.NS', 'AKANKSHA.NS', 'AMBANIORGO.NS', 'AMBAAUTO.NS', 'ANYA.NS', 'ANAWIL.NS']: possibly delisted; no timezone found
+  200/3309     31s  eta  482s
+$AUSL.NS: possibly delisted; no timezone found
+$APRAMEYA.NS: possibly delisted; no timezone found
+$ARCIIL.NS: possibly delisted; no timezone found
+$APSISAERO.NS: possibly delisted; no timezone found
+$ARHAM.NS: possibly delisted; no timezone found
+$ASHWINI.NS: possibly delisted; no timezone found
+$ATCENERGY.NS: possibly delisted; no timezone found
+$ASHALOG.NS: possibly delisted; no timezone found
+$APEXECO.NS: possibly delisted; no timezone found
+$ARUNAYA.NS: possibly delisted; no timezone found
+$ARMOUR.NS: possibly delisted; no timezone found
+$ARVINDPORT.NS: possibly delisted; no timezone found
+
+12 Failed downloads:
+['AUSL.NS', 'APRAMEYA.NS', 'ARCIIL.NS', 'APSISAERO.NS', 'ARHAM.NS', 'ASHWINI.NS', 'ATCENERGY.NS', 'ASHALOG.NS', 'APEXECO.NS', 'ARUNAYA.NS', 'ARMOUR.NS', 'ARVINDPORT.NS']: possibly delisted; no timezone found
+  300/3309     48s  eta  478s
+$AVANA.NS: possibly delisted; no timezone found
+$BALCO.NS: possibly delisted; no timezone found
+$BALAJIPHOS.NS: possibly delisted; no timezone found
+$BARFLEX.NS: possibly delisted; no timezone found
+$AVIANSH.NS: possibly delisted; no timezone found
+$BAGDIGITAL.NS: possibly delisted; no timezone found
+$AVATAR.NS: possibly delisted; no timezone found
+$AVIENCE.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['AVANA.NS', 'BALCO.NS', 'BALAJIPHOS.NS', 'BARFLEX.NS', 'AVIANSH.NS', 'BAGDIGITAL.NS', 'AVATAR.NS', 'AVIENCE.NS']: possibly delisted; no timezone found
+  400/3309     65s  eta  469s
+$BOSS.NS: possibly delisted; no timezone found
+$BIKEWO.NS: possibly delisted; no timezone found
+$BHADORA.NS: possibly delisted; no timezone found
+$BRANDMAN.NS: possibly delisted; no timezone found
+$BIOPOL.NS: possibly delisted; no timezone found
+$BLUEWATER.NS: possibly delisted; no timezone found
+$BMLL.NS: possibly delisted; no timezone found
+$BRACEPORT.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['BOSS.NS', 'BIKEWO.NS', 'BHADORA.NS', 'BRANDMAN.NS', 'BIOPOL.NS', 'BLUEWATER.NS', 'BMLL.NS', 'BRACEPORT.NS']: possibly delisted; no timezone found
+  500/3309     83s  eta  464s
+$CHAMUNDA.NS: possibly delisted; no timezone found
+$C2C.NS: possibly delisted; no timezone found
+$CLAYCRAFT.NS: possibly delisted; no timezone found
+$BULKCORP.NS: possibly delisted; no timezone found
+$CEDAAR.NS: possibly delisted; no timezone found
+$CHANDAN.NS: possibly delisted; no timezone found
+$CKKRETAIL.NS: possibly delisted; no timezone found
+$CLASSICEIL.NS: possibly delisted; no timezone found
+$CHETANA.NS: possibly delisted; no timezone found
+
+9 Failed downloads:
+['CHAMUNDA.NS', 'C2C.NS', 'CLAYCRAFT.NS', 'BULKCORP.NS', 'CEDAAR.NS', 'CHANDAN.NS', 'CKKRETAIL.NS', 'CLASSICEIL.NS', 'CHETANA.NS']: possibly delisted; no timezone found
+  600/3309    100s  eta  453s
+$CONNPLEX.NS: possibly delisted; no timezone found
+$CURIS.NS: possibly delisted; no timezone found
+$DECCANTRAN.NS: possibly delisted; no timezone found
+$DCCL.NS: possibly delisted; no timezone found
+$DANISH.NS: possibly delisted; no timezone found
+$CSSL.NS: possibly delisted; no timezone found
+$CURRENT.NS: possibly delisted; no timezone found
+$CUDML.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['CONNPLEX.NS', 'CURIS.NS', 'DECCANTRAN.NS', 'DCCL.NS', 'DANISH.NS', 'CSSL.NS', 'CURRENT.NS', 'CUDML.NS']: possibly delisted; no timezone found
+  700/3309    117s  eta  437s
+$DIVYADHAN.NS: possibly delisted; no timezone found
+$DIRL.NS: possibly delisted; no timezone found
+$DHARIWAL.NS: possibly delisted; no timezone found
+$DIVINEHIRA.NS: possibly delisted; no timezone found
+$DELTIC.NS: possibly delisted; no timezone found
+$DRSCARGO.NS: possibly delisted; no timezone found
+$DUMMYINXGN.NS: possibly delisted; no timezone found
+$DHANSA.NS: possibly delisted; no timezone found
+$DUMMYTRVN.NS: possibly delisted; no timezone found
+$DHARARAIL.NS: possibly delisted; no timezone found
+$E2ERAIL.NS: possibly delisted; no timezone found
+
+11 Failed downloads:
+['DIVYADHAN.NS', 'DIRL.NS', 'DHARIWAL.NS', 'DIVINEHIRA.NS', 'DELTIC.NS', 'DRSCARGO.NS', 'DUMMYINXGN.NS', 'DHANSA.NS', 'DUMMYTRVN.NS', 'DHARARAIL.NS', 'E2ERAIL.NS']: possibly delisted; no timezone found
+  800/3309    134s  eta  421s
+$ETML.NS: possibly delisted; no timezone found
+$ESPRIT.NS: possibly delisted; no timezone found
+$EPWINDIA.NS: possibly delisted; no timezone found
+$EMAPARTNER.NS: possibly delisted; no timezone found
+$ELGNZ.NS: possibly delisted; no timezone found
+$ETL.NS: possibly delisted; no timezone found
+$ECOLINE.NS: possibly delisted; no timezone found
+$EEPL.NS: possibly delisted; no timezone found
+$ENCOMPAS.NS: possibly delisted; no timezone found
+$ENVIRO.NS: possibly delisted; no timezone found
+
+10 Failed downloads:
+['ETML.NS', 'ESPRIT.NS', 'EPWINDIA.NS', 'EMAPARTNER.NS', 'ELGNZ.NS', 'ETL.NS', 'ECOLINE.NS', 'EEPL.NS', 'ENCOMPAS.NS', 'ENVIRO.NS']: possibly delisted; no timezone found
+  900/3309    149s  eta  400s
+$EXIMROUTES.NS: possibly delisted; no timezone found
+$FLYSBS.NS: possibly delisted; no timezone found
+$FINBUD.NS: possibly delisted; no timezone found
+$FRESHARA.NS: possibly delisted; no timezone found
+$GAJANAND.NS: possibly delisted; no timezone found
+$FOCE.NS: possibly delisted; no timezone found
+$FORCAS.NS: possibly delisted; no timezone found
+$GCHOTELS.NS: possibly delisted; no timezone found
+$GANESHIN.NS: possibly delisted; no timezone found
+$GANGABATH.NS: possibly delisted; no timezone found
+$FORGEAUTO.NS: possibly delisted; no timezone found
+$EXCELLENT.NS: possibly delisted; no timezone found
+$FWSTC.NS: possibly delisted; no timezone found
+
+13 Failed downloads:
+['EXIMROUTES.NS', 'FLYSBS.NS', 'FINBUD.NS', 'FRESHARA.NS', 'GAJANAND.NS', 'FOCE.NS', 'FORCAS.NS', 'GCHOTELS.NS', 'GANESHIN.NS', 'GANGABATH.NS', 'FORGEAUTO.NS', 'EXCELLENT.NS', 'FWSTC.NS']: possibly delisted; no timezone found
+  1000/3309    166s  eta  383s
+$GJL.NS: possibly delisted; no timezone found
+$GML.NS: possibly delisted; no timezone found
+$GENXAI.NS: possibly delisted; no timezone found
+
+3 Failed downloads:
+['GJL.NS', 'GML.NS', 'GENXAI.NS']: possibly delisted; no timezone found
+  1100/3309    182s  eta  365s
+$HAPPY.NS: possibly delisted; no timezone found
+$GURUNANAK.NS: possibly delisted; no timezone found
+$GREENLEAF.NS: possibly delisted; no timezone found
+
+3 Failed downloads:
+['HAPPY.NS', 'GURUNANAK.NS', 'GREENLEAF.NS']: possibly delisted; no timezone found
+  1200/3309    200s  eta  351s
+$HVAX.NS: possibly delisted; no timezone found
+$IDEALTECHO.NS: possibly delisted; no timezone found
+$HPTL.NS: possibly delisted; no timezone found
+$ICELCO.NS: possibly delisted; no timezone found
+
+4 Failed downloads:
+['HVAX.NS', 'IDEALTECHO.NS', 'HPTL.NS', 'ICELCO.NS']: possibly delisted; no timezone found
+  1300/3309    225s  eta  348s
+$INFLUX.NS: possibly delisted; no timezone found
+$IDENTICAL.NS: possibly delisted; no timezone found
+$INNOMET.NS: possibly delisted; no timezone found
+$INTEGRITY.NS: possibly delisted; no timezone found
+$IPHL.NS: possibly delisted; no timezone found
+$INVICTA.NS: possibly delisted; no timezone found
+
+6 Failed downloads:
+['INFLUX.NS', 'IDENTICAL.NS', 'INNOMET.NS', 'INTEGRITY.NS', 'IPHL.NS', 'INVICTA.NS']: possibly delisted; no timezone found
+  1400/3309    241s  eta  328s
+$ITTL.NS: possibly delisted; no timezone found
+$JAYBEE.NS: possibly delisted; no timezone found
+$JAYESH.NS: possibly delisted; no timezone found
+$JAINIK.NS: possibly delisted; no timezone found
+$JEYYAM.NS: possibly delisted; no timezone found
+$IWARE.NS: possibly delisted; no timezone found
+
+6 Failed downloads:
+['ITTL.NS', 'JAYBEE.NS', 'JAYESH.NS', 'JAINIK.NS', 'JEYYAM.NS', 'IWARE.NS']: possibly delisted; no timezone found
+  1500/3309    257s  eta  309s
+$JYOTIGLOBL.NS: possibly delisted; no timezone found
+$KALANA.NS: possibly delisted; no timezone found
+$KATARIA.NS: possibly delisted; no timezone found
+$KEN.NS: possibly delisted; no timezone found
+$KKJEWELS.NS: possibly delisted; no timezone found
+$KAYTEX.NS: possibly delisted; no timezone found
+
+6 Failed downloads:
+['JYOTIGLOBL.NS', 'KALANA.NS', 'KATARIA.NS', 'KEN.NS', 'KKJEWELS.NS', 'KAYTEX.NS']: possibly delisted; no timezone found
+  1600/3309    273s  eta  291s
+$LAKSHYA.NS: possibly delisted; no timezone found
+$LAMOSAIC.NS: possibly delisted; no timezone found
+$KRMAYURVED.NS: possibly delisted; no timezone found
+
+3 Failed downloads:
+['LAKSHYA.NS', 'LAMOSAIC.NS', 'KRMAYURVED.NS']: possibly delisted; no timezone found
+  1700/3309    287s  eta  272s
+$MARUSHIKA.NS: possibly delisted; no timezone found
+$MANILAM.NS: possibly delisted; no timezone found
+$MACOBSTECH.NS: possibly delisted; no timezone found
+
+3 Failed downloads:
+['MARUSHIKA.NS', 'MANILAM.NS', 'MACOBSTECH.NS']: possibly delisted; no timezone found
+  1800/3309    303s  eta  254s
+$MAXVOLT.NS: possibly delisted; no timezone found
+$MEDISTEP.NS: possibly delisted; no timezone found
+$MIEL.NS: possibly delisted; no timezone found
+$MAYASHEEL.NS: possibly delisted; no timezone found
+$METALIC.NS: possibly delisted; no timezone found
+$MOBILISE.NS: possibly delisted; no timezone found
+$MGSL.NS: possibly delisted; no timezone found
+$MMEL.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['MAXVOLT.NS', 'MEDISTEP.NS', 'MIEL.NS', 'MAYASHEEL.NS', 'METALIC.NS', 'MOBILISE.NS', 'MGSL.NS', 'MMEL.NS']: possibly delisted; no timezone found
+  1900/3309    318s  eta  236s
+$MYMUDRA.NS: possibly delisted; no timezone found
+$NAMOEWASTE.NS: possibly delisted; no timezone found
+$MPEL.NS: possibly delisted; no timezone found
+$MONOLITH.NS: possibly delisted; no timezone found
+$MUNISH.NS: possibly delisted; no timezone found
+$MRIL.NS: possibly delisted; no timezone found
+
+6 Failed downloads:
+['MYMUDRA.NS', 'NAMOEWASTE.NS', 'MPEL.NS', 'MONOLITH.NS', 'MUNISH.NS', 'MRIL.NS']: possibly delisted; no timezone found
+  2000/3309    333s  eta  218s
+$NEOCHEM.NS: possibly delisted; no timezone found
+$NMSTEEL.NS: possibly delisted; no timezone found
+$NIKITA.NS: possibly delisted; no timezone found
+$NEELAM.NS: possibly delisted; no timezone found
+$NFPSAMPOOR.NS: possibly delisted; no timezone found
+$NRVANDANA.NS: possibly delisted; no timezone found
+$NEPTUNE.NS: possibly delisted; no timezone found
+
+7 Failed downloads:
+['NEOCHEM.NS', 'NMSTEEL.NS', 'NIKITA.NS', 'NEELAM.NS', 'NFPSAMPOOR.NS', 'NRVANDANA.NS', 'NEPTUNE.NS']: possibly delisted; no timezone found
+  2100/3309    349s  eta  201s
+$OSELDEVICE.NS: possibly delisted; no timezone found
+$PARTH.NS: possibly delisted; no timezone found
+$ONYX.NS: possibly delisted; no timezone found
+$OBSCP.NS: possibly delisted; no timezone found
+$PATILAUTOM.NS: possibly delisted; no timezone found
+$OPTIVALUE.NS: possibly delisted; no timezone found
+$PARAMOUNT.NS: possibly delisted; no timezone found
+$OPTIMYSTIX.NS: possibly delisted; no timezone found
+$PARAMPARA.NS: possibly delisted; no timezone found
+$PARAMATRIX.NS: possibly delisted; no timezone found
+
+10 Failed downloads:
+['OSELDEVICE.NS', 'PARTH.NS', 'ONYX.NS', 'OBSCP.NS', 'PATILAUTOM.NS', 'OPTIVALUE.NS', 'PARAMOUNT.NS', 'OPTIMYSTIX.NS', 'PARAMPARA.NS', 'PARAMATRIX.NS']: possibly delisted; no timezone found
+  2200/3309    366s  eta  184s
+$PELATRO.NS: possibly delisted; no timezone found
+$PRIMECAB.NS: possibly delisted; no timezone found
+$PRANIK.NS: possibly delisted; no timezone found
+$PHOGLOBAL.NS: possibly delisted; no timezone found
+$PPSL.NS: possibly delisted; no timezone found
+$POSITRON.NS: possibly delisted; no timezone found
+$PREMIUM.NS: possibly delisted; no timezone found
+
+7 Failed downloads:
+['PELATRO.NS', 'PRIMECAB.NS', 'PRANIK.NS', 'PHOGLOBAL.NS', 'PPSL.NS', 'POSITRON.NS', 'PREMIUM.NS']: possibly delisted; no timezone found
+  2300/3309    384s  eta  168s
+$PROFX.NS: possibly delisted; no timezone found
+$QLINE.NS: possibly delisted; no timezone found
+$QVCEL.NS: possibly delisted; no timezone found
+$RAJINDLTD.NS: possibly delisted; no timezone found
+$PURPLEUTED.NS: possibly delisted; no timezone found
+$RAPPID.NS: possibly delisted; no timezone found
+$RAPIDFLEET.NS: possibly delisted; no timezone found
+$PSRAJ.NS: possibly delisted; no timezone found
+$PUSHPA.NS: possibly delisted; no timezone found
+$PROPSHOP.NS: possibly delisted; no timezone found
+$PSFL.NS: possibly delisted; no timezone found
+$RAJPUTANA.NS: possibly delisted; no timezone found
+
+12 Failed downloads:
+['PROFX.NS', 'QLINE.NS', 'QVCEL.NS', 'RAJINDLTD.NS', 'PURPLEUTED.NS', 'RAPPID.NS', 'RAPIDFLEET.NS', 'PSRAJ.NS', 'PUSHPA.NS', 'PROPSHOP.NS', 'PSFL.NS', 'RAJPUTANA.NS']: possibly delisted; no timezone found
+  2400/3309    402s  eta  152s
+$RNPL.NS: possibly delisted; no timezone found
+$REXPRO.NS: possibly delisted; no timezone found
+$RICHA.NS: possibly delisted; no timezone found
+$RNFI.NS: possibly delisted; no timezone found
+$RFBL.NS: possibly delisted; no timezone found
+$ROYALARC.NS: possibly delisted; no timezone found
+$READYMIX.NS: possibly delisted; no timezone found
+$RTL.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['RNPL.NS', 'REXPRO.NS', 'RICHA.NS', 'RNFI.NS', 'RFBL.NS', 'ROYALARC.NS', 'READYMIX.NS', 'RTL.NS']: possibly delisted; no timezone found
+  2500/3309    419s  eta  136s
+$SDREAMS.NS: possibly delisted; no timezone found
+$SATKARTAR.NS: possibly delisted; no timezone found
+$SACHEEROME.NS: possibly delisted; no timezone found
+$SAVY.NS: possibly delisted; no timezone found
+$SAJHOTELS.NS: possibly delisted; no timezone found
+$SAHASRA.NS: possibly delisted; no timezone found
+$SATTVAENGG.NS: possibly delisted; no timezone found
+$SAWALIYA.NS: possibly delisted; no timezone found
+$SAMAY.NS: possibly delisted; no timezone found
+$SAFEENTP.NS: possibly delisted; no timezone found
+$SATECH.NS: possibly delisted; no timezone found
+
+11 Failed downloads:
+['SDREAMS.NS', 'SATKARTAR.NS', 'SACHEEROME.NS', 'SAVY.NS', 'SAJHOTELS.NS', 'SAHASRA.NS', 'SATTVAENGG.NS', 'SAWALIYA.NS', 'SAMAY.NS', 'SAFEENTP.NS', 'SATECH.NS']: possibly delisted; no timezone found
+  2600/3309    436s  eta  119s
+$SFML.NS: possibly delisted; no timezone found
+$SHIVASHRIT.NS: possibly delisted; no timezone found
+$SHRIKANHA.NS: possibly delisted; no timezone found
+$SHKSIL.NS: possibly delisted; no timezone found
+$SHEEL.NS: possibly delisted; no timezone found
+$SELLOWRAP.NS: possibly delisted; no timezone found
+$SHYAMDHANI.NS: possibly delisted; no timezone found
+$SHETHJI.NS: possibly delisted; no timezone found
+$SHRIAHIMSA.NS: possibly delisted; no timezone found
+$SHUBHSHREE.NS: possibly delisted; no timezone found
+$SHREEDHAR.NS: possibly delisted; no timezone found
+
+11 Failed downloads:
+['SFML.NS', 'SHIVASHRIT.NS', 'SHRIKANHA.NS', 'SHKSIL.NS', 'SHEEL.NS', 'SELLOWRAP.NS', 'SHYAMDHANI.NS', 'SHETHJI.NS', 'SHRIAHIMSA.NS', 'SHUBHSHREE.NS', 'SHREEDHAR.NS']: possibly delisted; no timezone found
+  2700/3309    453s  eta  102s
+$SNEHAA.NS: possibly delisted; no timezone found
+$SOCL.NS: possibly delisted; no timezone found
+$SPEB.NS: possibly delisted; no timezone found
+$SILKY.NS: possibly delisted; no timezone found
+$SIMCA.NS: possibly delisted; no timezone found
+$SPCON.NS: possibly delisted; no timezone found
+$SMARTEN.NS: possibly delisted; no timezone found
+$SIDDHICOTS.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['SNEHAA.NS', 'SOCL.NS', 'SPEB.NS', 'SILKY.NS', 'SIMCA.NS', 'SPCON.NS', 'SMARTEN.NS', 'SIDDHICOTS.NS']: possibly delisted; no timezone found
+  2800/3309    470s  eta   85s
+$SPUNWEB.NS: possibly delisted; no timezone found
+$SUNTECH.NS: possibly delisted; no timezone found
+$SUBAHOTELS.NS: possibly delisted; no timezone found
+$SUNLITE.NS: possibly delisted; no timezone found
+$SPPPOLY.NS: possibly delisted; no timezone found
+$STRIDERS.NS: possibly delisted; no timezone found
+$SSEGL.NS: possibly delisted; no timezone found
+$STUDIOLSD.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['SPUNWEB.NS', 'SUNTECH.NS', 'SUBAHOTELS.NS', 'SUNLITE.NS', 'SPPPOLY.NS', 'STRIDERS.NS', 'SSEGL.NS', 'STUDIOLSD.NS']: possibly delisted; no timezone found
+  2900/3309    487s  eta   69s
+$TEJASCARGO.NS: possibly delisted; no timezone found
+$TANKUP.NS: possibly delisted; no timezone found
+$TEJA.NS: possibly delisted; no timezone found
+$TECHD.NS: possibly delisted; no timezone found
+$THESL.NS: possibly delisted; no timezone found
+$TECHERA.NS: possibly delisted; no timezone found
+$TEAMTECH.NS: possibly delisted; no timezone found
+$TAURIAN.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['TEJASCARGO.NS', 'TANKUP.NS', 'TEJA.NS', 'TECHD.NS', 'THESL.NS', 'TECHERA.NS', 'TEAMTECH.NS', 'TAURIAN.NS']: possibly delisted; no timezone found
+  3000/3309    504s  eta   52s
+$UNILEX.NS: possibly delisted; no timezone found
+$TROM.NS: possibly delisted; no timezone found
+$TSC.NS: possibly delisted; no timezone found
+$UHTL.NS: possibly delisted; no timezone found
+
+4 Failed downloads:
+['UNILEX.NS', 'TROM.NS', 'TSC.NS', 'UHTL.NS']: possibly delisted; no timezone found
+  3100/3309    521s  eta   35s
+$UTKAL.NS: possibly delisted; no timezone found
+$VGINFOTECH.NS: possibly delisted; no timezone found
+$UTSSAV.NS: possibly delisted; no timezone found
+$VISDEM.NS: possibly delisted; no timezone found
+$USHAFIN.NS: possibly delisted; no timezone found
+$VALUE360.NS: possibly delisted; no timezone found
+$VIGOR.NS: possibly delisted; no timezone found
+$VDEAL.NS: possibly delisted; no timezone found
+$VICTORYEV.NS: possibly delisted; no timezone found
+$VIESL.NS: possibly delisted; no timezone found
+$VIJAYPD.NS: possibly delisted; no timezone found
+
+11 Failed downloads:
+['UTKAL.NS', 'VGINFOTECH.NS', 'UTSSAV.NS', 'VISDEM.NS', 'USHAFIN.NS', 'VALUE360.NS', 'VIGOR.NS', 'VDEAL.NS', 'VICTORYEV.NS', 'VIESL.NS', 'VIJAYPD.NS']: possibly delisted; no timezone found
+  3200/3309    538s  eta   18s
+$WOL3D.NS: possibly delisted; no timezone found
+$YAAP.NS: possibly delisted; no timezone found
+$VOLERCAR.NS: possibly delisted; no timezone found
+$VIVIDEL.NS: possibly delisted; no timezone found
+$WHITEFORCE.NS: possibly delisted; no timezone found
+$VLINFRA.NS: possibly delisted; no timezone found
+$VMOBILE.NS: possibly delisted; no timezone found
+
+7 Failed downloads:
+['WOL3D.NS', 'YAAP.NS', 'VOLERCAR.NS', 'VIVIDEL.NS', 'WHITEFORCE.NS', 'VLINFRA.NS', 'VMOBILE.NS']: possibly delisted; no timezone found
+  3300/3309    554s  eta    2s
+  3309/3309    557s  eta    0s
+
+[36m==================================================================
+== 3. result
+==================================================================[0m
+  [32mok  [0m 3,051 cached, 258 no data, 0 errors, 558s
+       0.169s per symbol (the serialised path was ~0.45s)
+       symbols without data written to /opt/breakoutscanner/data_cache/prefetch_no_data.txt
+       e.g. AAKAAR, AARADHYA, ABHAPOWER, ACCPL, ACETEC, ACTIVEINFR, ADDICTIVE, ADISOFT
+
+  [1mNow run the build. It should read cache and finish in a fraction of
+  the time — that comparison is the point, so time it:[0m
+
+      time sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+        /opt/breakoutscanner/build_snapshot.py --symbols-file /opt/breakoutscanner/nse_all_equity.txt
+
+  [33mIf it is still slow, the cache is being rejected rather than missing,
+  and the min_rows threshold is the next thing to change — not this.[0m
+--- building snapshot ---
+Nifty Capital Markets: no constituent file found (24 URLs tried)
+
+[36m== building snapshot: /opt/breakoutscanner/nse_all_equity.txt ==[0m
+  /opt/breakoutscanner/nse_all_equity.txt: 3309 symbols
+  skipping 258 symbol(s) prefetch found no data for (it retries them on its next run)
+  breakout detector: detect_breakout(df, symbol, timeframe, cfg, mode, vol_mult, lookback, atr_period, atr_mult, direction_filter)
+  25/3051      4s  eta  486s
+  50/3051      7s  eta  431s
+  75/3051     11s  eta  419s
+  100/3051     14s  eta  408s
+  125/3051     18s  eta  414s
+  150/3051     21s  eta  409s
+  175/3051     25s  eta  403s
+  200/3051     28s  eta  395s
+  225/3051     31s  eta  389s
+  250/3051     34s  eta  384s
+  275/3051     37s  eta  378s
+  300/3051     41s  eta  372s
+  325/3051     44s  eta  368s
+  350/3051     47s  eta  363s
+  375/3051     50s  eta  358s
+  400/3051     54s  eta  357s
+  425/3051     57s  eta  353s
+  450/3051     60s  eta  349s
+  475/3051     64s  eta  345s
+  500/3051     67s  eta  343s
+  525/3051     71s  eta  340s
+  550/3051     74s  eta  336s
+  575/3051     77s  eta  333s
+  600/3051     81s  eta  330s
+  625/3051     84s  eta  327s
+  650/3051     87s  eta  323s
+  675/3051     91s  eta  319s
+  700/3051     94s  eta  314s
+  725/3051     97s  eta  310s
+  750/3051    100s  eta  306s
+  775/3051    103s  eta  303s
+  800/3051    106s  eta  299s
+  825/3051    109s  eta  295s
+  850/3051    113s  eta  292s
+  875/3051    118s  eta  292s
+  900/3051    121s  eta  289s
+  925/3051    125s  eta  287s
+  950/3051    128s  eta  283s
+  975/3051    131s  eta  280s
+  1000/3051    135s  eta  276s
+  1025/3051    138s  eta  272s
+  1050/3051    140s  eta  268s
+  1075/3051    144s  eta  265s
+  1100/3051    147s  eta  261s
+  1125/3051    150s  eta  258s
+  1150/3051    154s  eta  255s
+  1175/3051    158s  eta  252s
+  1200/3051    161s  eta  248s
+  1225/3051    164s  eta  245s
+  1250/3051    168s  eta  242s
+  1275/3051    171s  eta  238s
+  1300/3051    174s  eta  235s
+  1325/3051    178s  eta  232s
+  1350/3051    181s  eta  228s
+  1375/3051    185s  eta  225s
+  1400/3051    188s  eta  222s
+  1425/3051    191s  eta  218s
+  1450/3051    194s  eta  215s
+  1475/3051    197s  eta  211s
+  1500/3051    200s  eta  207s
+  1525/3051    204s  eta  204s
+  1550/3051    208s  eta  201s
+  1575/3051    210s  eta  197s
+  1600/3051    214s  eta  194s
+  1625/3051    217s  eta  190s
+  1650/3051    220s  eta  187s
+  1675/3051    223s  eta  183s
+  1700/3051    226s  eta  180s
+  1725/3051    229s  eta  176s
+  1750/3051    233s  eta  173s
+  1775/3051    236s  eta  170s
+  1800/3051    239s  eta  166s
+  1825/3051    243s  eta  163s
+  1850/3051    246s  eta  160s
+  1875/3051    249s  eta  156s
+  1900/3051    252s  eta  153s
+  1925/3051    256s  eta  149s
+  1950/3051    259s  eta  146s
+  1975/3051    262s  eta  143s
+  2000/3051    265s  eta  139s
+  2025/3051    268s  eta  136s
+  2050/3051    271s  eta  132s
+  2075/3051    274s  eta  129s
+  2100/3051    277s  eta  125s
+  2125/3051    280s  eta  122s
+  2150/3051    283s  eta  119s
+  2175/3051    287s  eta  115s
+  2200/3051    290s  eta  112s
+  2225/3051    293s  eta  109s
+  2250/3051    297s  eta  106s
+  2275/3051    300s  eta  102s
+  2300/3051    303s  eta   99s
+  2325/3051    306s  eta   95s
+  2350/3051    309s  eta   92s
+  2375/3051    312s  eta   89s
+  2400/3051    315s  eta   86s
+  2425/3051    318s  eta   82s
+  2450/3051    322s  eta   79s
+  2475/3051    325s  eta   76s
+  2500/3051    328s  eta   72s
+  2525/3051    331s  eta   69s
+  2550/3051    335s  eta   66s
+  2575/3051    338s  eta   63s
+  2600/3051    342s  eta   59s
+  2625/3051    345s  eta   56s
+  2650/3051    348s  eta   53s
+  2675/3051    351s  eta   49s
+  2700/3051    355s  eta   46s
+  2725/3051    358s  eta   43s
+  2750/3051    362s  eta   40s
+  2775/3051    365s  eta   36s
+  2800/3051    369s  eta   33s
+  2825/3051    372s  eta   30s
+  2850/3051    375s  eta   26s
+  2875/3051    379s  eta   23s
+  2900/3051    382s  eta   20s
+  2925/3051    386s  eta   17s
+  2950/3051    389s  eta   13s
+  2975/3051    392s  eta   10s
+  3000/3051    396s  eta    7s
+  3025/3051    399s  eta    3s
+  3050/3051    402s  eta    0s
+  [33mnote[0m  310 symbol(s) did not trade on 2026-08-14 — flagged traded_today = false
+  cap bands: Below Microcap 2301, Small 250, Micro 250, Mid 150, Large 100
+  [32mok[0m  3051 of 3051 obtainable symbols (100.0% coverage), 0 skipped, 486s
+        257 known-unavailable excluded (no data for 3+ runs); raw coverage 100.0% of 3051
+        data as of 2026-08-14, 310 symbol(s) behind it
+  [31mstale[0m 310 symbol(s) (10%) use prices older than 2026-08-14, oldest 2026-08-12
+        Normal for illiquid names: they did not trade, so no bar exists. All are flagged traded_today = false and excluded from 'today' screens by default.
+          GSEC10ABSL     2026-08-12
+          LIQUIDBETA     2026-08-12
+          AATMAJ         2026-08-13
+          ABSMARINE      2026-08-13
+          ACCENTMIC      2026-08-13
+          ACCORD         2026-08-13
+          AGARWALFT      2026-08-13
+          AGNI           2026-08-13
+  [32mok[0m  breakouts: 403 total · 260 bullish · 143 bearish
+        1D: 134
+        1W: 230
+        1M: 191
+        Compare these against your live scan. They call the
+        SAME detect_breakout(), so they should agree exactly.
+  [32mok[0m  wrote 3051 rows for 2026-08-14  (5 day(s) of history)
+       /opt/breakoutscanner/data_cache/snapshot.duckdb
+
+[36m  predefined scanners against this snapshot:[0m
+    Horizontal Resistance             500
+    Tight Setup (Daily)               171
+    VCP                               470
+    RS High Before Price High          90
+    Flags & Pennants                  240
+    Inside Bar (Daily)                500
+    21 EMA Shakeout                    43
+    Gap Up (Unfilled)                 500
+    Volume Gainers                    425
+    Recent IPO Setups                 171
+    Minervini Trend Template          500
+    ★ Daily Screen — breakout in a strong stock   66
+
+  Open the Screener page in the app to query it interactively.
+wrote 3051 rows for 2026-08-14  (92% of 3309)
+=== DEGRADED: 92% coverage ===
+=== finished 2026-08-14T12:31:18+00:00 ===
+=== nightly build started 2026-08-14T13:00:02+00:00 ===
+--- refreshing universe ---
+
+[36m==================================================================
+== 1. fetching every NSE instrument
+==================================================================[0m
+  [32mok  [0m 114,851 instruments in the dump
+
+  everything Kite tags segment=NSE instrument_type=EQ,
+  broken down by SERIES (the suffix after the hyphen):
+
+    SG                     4298   [33mdropped (debt/other)[0m
+    EQ (no suffix)         2806   [32mKEPT[0m
+    N0                      976   [33mdropped (debt/other)[0m
+    SM                      426   [32mKEPT[0m
+    BE                      252   [32mKEPT[0m
+    ST                      133   [32mKEPT[0m
+    GS                      130   [33mdropped (debt/other)[0m
+    N1                      107   [33mdropped (debt/other)[0m
+    TB                       84   [33mdropped (debt/other)[0m
+    SF                       50   [33mdropped (debt/other)[0m
+    GB                       45   [33mdropped (debt/other)[0m
+    N2                       37   [33mdropped (debt/other)[0m
+    N3                       29   [33mdropped (debt/other)[0m
+    BZ                       28   [32mKEPT[0m
+
+  [1m3,307 equities kept, 6,256 dropped[0m
+
+  KSHINTL present: [1mTrue[0m
+  sample: 20MICRONS, 21STCENMGM, 360ONE, 3BBLACKBIO, 3IINFOLTD, 3MINDIA, 3PLAND, 5PAISA, 63MOONS, A2ZINFRA ...
+
+[36m==================================================================
+== 2. how much is currently invisible
+==================================================================[0m
+  5 index list(s) consulted (excluding 'NSE All Equity' itself)
+  scannable today      752
+  [1mnewly scannable      2,557[0m
+
+  a few that were invisible: 20MICRONS, 21STCENMGM, 3BBLACKBIO, 3IINFOLTD, 3PLAND, 5PAISA, 63MOONS, A2ZINFRA, AAATECH, AAKAAR, AAKASH, AARADHYA ...
+
+  [33m2 symbol(s) are in your NIFTY indices but NOT in the equity dump:[0m
+    DUMMYINXGN, DUMMYTRVN
+  [32madded them — the universe is now a strict superset of the tradeable names you scan today[0m
+
+[36m==================================================================
+== 3. output
+==================================================================[0m
+  /opt/breakoutscanner/nse_all_equity.txt
+  [32mok  [0m wrote 3,309 symbols (27,456 bytes)
+  [32mok  [0m re-read cleanly; KSHINTL is in the list
+
+[36m==================================================================
+== next
+==================================================================[0m
+  Try a slice first — 2,000 symbols on a 512 MB box is a real risk:
+
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+      /opt/breakoutscanner/build_snapshot.py \
+      --symbols-file /opt/breakoutscanner/nse_all_equity.txt --limit 300
+
+  If that completes, drop --limit for the full run. Watch it the first
+  time. [33mAn OOM kill stops it mid-build, and a truncated snapshot is the
+  silent-wrong failure we have spent this session removing.[0m
+
+  Then confirm the stock that started this:
+
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+      /opt/breakoutscanner/diagnose_symbol.py KSHINTL
+universe: 3309 symbols
+--- prefetching price cache ---
+$AARADHYA.NS: possibly delisted; no timezone found
+$ACETEC.NS: possibly delisted; no timezone found
+$AERON.NS: possibly delisted; no timezone found
+$ADDICTIVE.NS: possibly delisted; no timezone found
+$ADISOFT.NS: possibly delisted; no timezone found
+$AESTHETIK.NS: possibly delisted; no timezone found
+$ACTIVEINFR.NS: possibly delisted; no timezone found
+$AAKAAR.NS: possibly delisted; no timezone found
+$ABHAPOWER.NS: possibly delisted; no timezone found
+$ACCPL.NS: possibly delisted; no timezone found
+
+10 Failed downloads:
+['AARADHYA.NS', 'ACETEC.NS', 'AERON.NS', 'ADDICTIVE.NS', 'ADISOFT.NS', 'AESTHETIK.NS', 'ACTIVEINFR.NS', 'AAKAAR.NS', 'ABHAPOWER.NS', 'ACCPL.NS']: possibly delisted; no timezone found
+  [33mwarn[0m --app points at the ORIGINAL app, not the lab.
+  [33mwarn[0m That is allowed but not the default. Ctrl-C now if unintended.
+
+[36m==================================================================
+== 1. wiring  (/opt/breakoutscanner)
+==================================================================[0m
+  [32mok  [0m yfinance 1.5.2, pandas 2.3.3
+  [32mok  [0m cache dir /opt/breakoutscanner/data_cache/prices_daily
+  [32mok  [0m yahoo_ticker and _normalize_ohlcv available
+  [32mok  [0m 3,309 symbols from nse_all_equity.txt
+
+  window     2020-01-19 -> 2026-08-15  (2400 calendar days)
+  batches    34 x 100
+  [1mvs the current path: 3,309 serialised requests[0m
+
+[36m==================================================================
+== 2. fetching
+==================================================================[0m
+  100/3309     18s  eta  566s
+$AMCL.NS: possibly delisted; no timezone found
+$ANAWIL.NS: possibly delisted; no timezone found
+$AKANKSHA.NS: possibly delisted; no timezone found
+$ALCODIS.NS: possibly delisted; no timezone found
+$AMBANIORGO.NS: possibly delisted; no timezone found
+$AMBAAUTO.NS: possibly delisted; no timezone found
+$ANONDITA.NS: possibly delisted; no timezone found
+$AGARWALTUF.NS: possibly delisted; no timezone found
+$ANYA.NS: possibly delisted; no timezone found
+
+9 Failed downloads:
+['AMCL.NS', 'ANAWIL.NS', 'AKANKSHA.NS', 'ALCODIS.NS', 'AMBANIORGO.NS', 'AMBAAUTO.NS', 'ANONDITA.NS', 'AGARWALTUF.NS', 'ANYA.NS']: possibly delisted; no timezone found
+  200/3309     34s  eta  523s
+$APRAMEYA.NS: possibly delisted; no timezone found
+$ASHWINI.NS: possibly delisted; no timezone found
+$ARCIIL.NS: possibly delisted; no timezone found
+$ARVINDPORT.NS: possibly delisted; no timezone found
+$APSISAERO.NS: possibly delisted; no timezone found
+$APEXECO.NS: possibly delisted; no timezone found
+$AUSL.NS: possibly delisted; no timezone found
+$ASHALOG.NS: possibly delisted; no timezone found
+$ARMOUR.NS: possibly delisted; no timezone found
+$ARHAM.NS: possibly delisted; no timezone found
+$ARUNAYA.NS: possibly delisted; no timezone found
+$ATCENERGY.NS: possibly delisted; no timezone found
+
+12 Failed downloads:
+['APRAMEYA.NS', 'ASHWINI.NS', 'ARCIIL.NS', 'ARVINDPORT.NS', 'APSISAERO.NS', 'APEXECO.NS', 'AUSL.NS', 'ASHALOG.NS', 'ARMOUR.NS', 'ARHAM.NS', 'ARUNAYA.NS', 'ATCENERGY.NS']: possibly delisted; no timezone found
+  300/3309     51s  eta  515s
+$AVIANSH.NS: possibly delisted; no timezone found
+$AVIENCE.NS: possibly delisted; no timezone found
+$BARFLEX.NS: possibly delisted; no timezone found
+$BALCO.NS: possibly delisted; no timezone found
+$BALAJIPHOS.NS: possibly delisted; no timezone found
+$AVANA.NS: possibly delisted; no timezone found
+$AVATAR.NS: possibly delisted; no timezone found
+$BAGDIGITAL.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['AVIANSH.NS', 'AVIENCE.NS', 'BARFLEX.NS', 'BALCO.NS', 'BALAJIPHOS.NS', 'AVANA.NS', 'AVATAR.NS', 'BAGDIGITAL.NS']: possibly delisted; no timezone found
+  400/3309     68s  eta  491s
+$BIOPOL.NS: possibly delisted; no timezone found
+$BHADORA.NS: possibly delisted; no timezone found
+$BLUEWATER.NS: possibly delisted; no timezone found
+$BOSS.NS: possibly delisted; no timezone found
+$BIKEWO.NS: possibly delisted; no timezone found
+$BRANDMAN.NS: possibly delisted; no timezone found
+$BRACEPORT.NS: possibly delisted; no timezone found
+$BMLL.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['BIOPOL.NS', 'BHADORA.NS', 'BLUEWATER.NS', 'BOSS.NS', 'BIKEWO.NS', 'BRANDMAN.NS', 'BRACEPORT.NS', 'BMLL.NS']: possibly delisted; no timezone found
+  500/3309     84s  eta  470s
+$CKKRETAIL.NS: possibly delisted; no timezone found
+$C2C.NS: possibly delisted; no timezone found
+$CLASSICEIL.NS: possibly delisted; no timezone found
+$CEDAAR.NS: possibly delisted; no timezone found
+$CHAMUNDA.NS: possibly delisted; no timezone found
+$CHANDAN.NS: possibly delisted; no timezone found
+$BULKCORP.NS: possibly delisted; no timezone found
+$CHETANA.NS: possibly delisted; no timezone found
+$CLAYCRAFT.NS: possibly delisted; no timezone found
+
+9 Failed downloads:
+['CKKRETAIL.NS', 'C2C.NS', 'CLASSICEIL.NS', 'CEDAAR.NS', 'CHAMUNDA.NS', 'CHANDAN.NS', 'BULKCORP.NS', 'CHETANA.NS', 'CLAYCRAFT.NS']: possibly delisted; no timezone found
+  600/3309    100s  eta  450s
+$CURIS.NS: possibly delisted; no timezone found
+$DANISH.NS: possibly delisted; no timezone found
+$CUDML.NS: possibly delisted; no timezone found
+$DCCL.NS: possibly delisted; no timezone found
+$CONNPLEX.NS: possibly delisted; no timezone found
+$CURRENT.NS: possibly delisted; no timezone found
+$DECCANTRAN.NS: possibly delisted; no timezone found
+$CSSL.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['CURIS.NS', 'DANISH.NS', 'CUDML.NS', 'DCCL.NS', 'CONNPLEX.NS', 'CURRENT.NS', 'DECCANTRAN.NS', 'CSSL.NS']: possibly delisted; no timezone found
+  700/3309    116s  eta  431s
+$DHARARAIL.NS: possibly delisted; no timezone found
+$DIVINEHIRA.NS: possibly delisted; no timezone found
+$DELTIC.NS: possibly delisted; no timezone found
+$DUMMYTRVN.NS: possibly delisted; no timezone found
+$DIRL.NS: possibly delisted; no timezone found
+$DHANSA.NS: possibly delisted; no timezone found
+$DRSCARGO.NS: possibly delisted; no timezone found
+$DIVYADHAN.NS: possibly delisted; no timezone found
+$E2ERAIL.NS: possibly delisted; no timezone found
+$DHARIWAL.NS: possibly delisted; no timezone found
+$DUMMYINXGN.NS: possibly delisted; no timezone found
+
+11 Failed downloads:
+['DHARARAIL.NS', 'DIVINEHIRA.NS', 'DELTIC.NS', 'DUMMYTRVN.NS', 'DIRL.NS', 'DHANSA.NS', 'DRSCARGO.NS', 'DIVYADHAN.NS', 'E2ERAIL.NS', 'DHARIWAL.NS', 'DUMMYINXGN.NS']: possibly delisted; no timezone found
+  800/3309    134s  eta  420s
+$EPWINDIA.NS: possibly delisted; no timezone found
+$ETML.NS: possibly delisted; no timezone found
+$EMAPARTNER.NS: possibly delisted; no timezone found
+$ENVIRO.NS: possibly delisted; no timezone found
+$ELGNZ.NS: possibly delisted; no timezone found
+$ETL.NS: possibly delisted; no timezone found
+$EEPL.NS: possibly delisted; no timezone found
+$ENCOMPAS.NS: possibly delisted; no timezone found
+$ESPRIT.NS: possibly delisted; no timezone found
+$ECOLINE.NS: possibly delisted; no timezone found
+
+10 Failed downloads:
+['EPWINDIA.NS', 'ETML.NS', 'EMAPARTNER.NS', 'ENVIRO.NS', 'ELGNZ.NS', 'ETL.NS', 'EEPL.NS', 'ENCOMPAS.NS', 'ESPRIT.NS', 'ECOLINE.NS']: possibly delisted; no timezone found
+  900/3309    149s  eta  399s
+$GCHOTELS.NS: possibly delisted; no timezone found
+$FWSTC.NS: possibly delisted; no timezone found
+$EXCELLENT.NS: possibly delisted; no timezone found
+$FINBUD.NS: possibly delisted; no timezone found
+$EXIMROUTES.NS: possibly delisted; no timezone found
+$FORCAS.NS: possibly delisted; no timezone found
+$FOCE.NS: possibly delisted; no timezone found
+$GAJANAND.NS: possibly delisted; no timezone found
+$FLYSBS.NS: possibly delisted; no timezone found
+$GANESHIN.NS: possibly delisted; no timezone found
+$FORGEAUTO.NS: possibly delisted; no timezone found
+$GANGABATH.NS: possibly delisted; no timezone found
+$FRESHARA.NS: possibly delisted; no timezone found
+
+13 Failed downloads:
+['GCHOTELS.NS', 'FWSTC.NS', 'EXCELLENT.NS', 'FINBUD.NS', 'EXIMROUTES.NS', 'FORCAS.NS', 'FOCE.NS', 'GAJANAND.NS', 'FLYSBS.NS', 'GANESHIN.NS', 'FORGEAUTO.NS', 'GANGABATH.NS', 'FRESHARA.NS']: possibly delisted; no timezone found
+  1000/3309    166s  eta  382s
+$GJL.NS: possibly delisted; no timezone found
+$GENXAI.NS: possibly delisted; no timezone found
+$GML.NS: possibly delisted; no timezone found
+
+3 Failed downloads:
+['GJL.NS', 'GENXAI.NS', 'GML.NS']: possibly delisted; no timezone found
+  1100/3309    182s  eta  365s
+$HAPPY.NS: possibly delisted; no timezone found
+$GURUNANAK.NS: possibly delisted; no timezone found
+$GREENLEAF.NS: possibly delisted; no timezone found
+
+3 Failed downloads:
+['HAPPY.NS', 'GURUNANAK.NS', 'GREENLEAF.NS']: possibly delisted; no timezone found
+  1200/3309    197s  eta  346s
+$HPTL.NS: possibly delisted; no timezone found
+$HVAX.NS: possibly delisted; no timezone found
+$ICELCO.NS: possibly delisted; no timezone found
+$IDEALTECHO.NS: possibly delisted; no timezone found
+
+4 Failed downloads:
+['HPTL.NS', 'HVAX.NS', 'ICELCO.NS', 'IDEALTECHO.NS']: possibly delisted; no timezone found
+  1300/3309    213s  eta  329s
+$IDENTICAL.NS: possibly delisted; no timezone found
+$INVICTA.NS: possibly delisted; no timezone found
+$INNOMET.NS: possibly delisted; no timezone found
+$INFLUX.NS: possibly delisted; no timezone found
+$IPHL.NS: possibly delisted; no timezone found
+$INTEGRITY.NS: possibly delisted; no timezone found
+
+6 Failed downloads:
+['IDENTICAL.NS', 'INVICTA.NS', 'INNOMET.NS', 'INFLUX.NS', 'IPHL.NS', 'INTEGRITY.NS']: possibly delisted; no timezone found
+  1400/3309    230s  eta  314s
+$JAYBEE.NS: possibly delisted; no timezone found
+$JEYYAM.NS: possibly delisted; no timezone found
+$JAYESH.NS: possibly delisted; no timezone found
+$JAINIK.NS: possibly delisted; no timezone found
+$IWARE.NS: possibly delisted; no timezone found
+$ITTL.NS: possibly delisted; no timezone found
+
+6 Failed downloads:
+['JAYBEE.NS', 'JEYYAM.NS', 'JAYESH.NS', 'JAINIK.NS', 'IWARE.NS', 'ITTL.NS']: possibly delisted; no timezone found
+  1500/3309    247s  eta  298s
+$KALANA.NS: possibly delisted; no timezone found
+$KKJEWELS.NS: possibly delisted; no timezone found
+$KATARIA.NS: possibly delisted; no timezone found
+$KEN.NS: possibly delisted; no timezone found
+$JYOTIGLOBL.NS: possibly delisted; no timezone found
+$KAYTEX.NS: possibly delisted; no timezone found
+
+6 Failed downloads:
+['KALANA.NS', 'KKJEWELS.NS', 'KATARIA.NS', 'KEN.NS', 'JYOTIGLOBL.NS', 'KAYTEX.NS']: possibly delisted; no timezone found
+  1600/3309    264s  eta  282s
+$LAKSHYA.NS: possibly delisted; no timezone found
+$KRMAYURVED.NS: possibly delisted; no timezone found
+$LAMOSAIC.NS: possibly delisted; no timezone found
+
+3 Failed downloads:
+['LAKSHYA.NS', 'KRMAYURVED.NS', 'LAMOSAIC.NS']: possibly delisted; no timezone found
+  1700/3309    280s  eta  265s
+$MARUSHIKA.NS: possibly delisted; no timezone found
+$MANILAM.NS: possibly delisted; no timezone found
+$MACOBSTECH.NS: possibly delisted; no timezone found
+
+3 Failed downloads:
+['MARUSHIKA.NS', 'MANILAM.NS', 'MACOBSTECH.NS']: possibly delisted; no timezone found
+  1800/3309    298s  eta  250s
+$METALIC.NS: possibly delisted; no timezone found
+$MGSL.NS: possibly delisted; no timezone found
+$MMEL.NS: possibly delisted; no timezone found
+$MAYASHEEL.NS: possibly delisted; no timezone found
+$MEDISTEP.NS: possibly delisted; no timezone found
+$MOBILISE.NS: possibly delisted; no timezone found
+$MIEL.NS: possibly delisted; no timezone found
+$MAXVOLT.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['METALIC.NS', 'MGSL.NS', 'MMEL.NS', 'MAYASHEEL.NS', 'MEDISTEP.NS', 'MOBILISE.NS', 'MIEL.NS', 'MAXVOLT.NS']: possibly delisted; no timezone found
+  1900/3309    314s  eta  233s
+$MUNISH.NS: possibly delisted; no timezone found
+$MRIL.NS: possibly delisted; no timezone found
+$MONOLITH.NS: possibly delisted; no timezone found
+$NAMOEWASTE.NS: possibly delisted; no timezone found
+$MPEL.NS: possibly delisted; no timezone found
+$MYMUDRA.NS: possibly delisted; no timezone found
+
+6 Failed downloads:
+['MUNISH.NS', 'MRIL.NS', 'MONOLITH.NS', 'NAMOEWASTE.NS', 'MPEL.NS', 'MYMUDRA.NS']: possibly delisted; no timezone found
+  2000/3309    329s  eta  215s
+$NIKITA.NS: possibly delisted; no timezone found
+$NFPSAMPOOR.NS: possibly delisted; no timezone found
+$NRVANDANA.NS: possibly delisted; no timezone found
+$NEELAM.NS: possibly delisted; no timezone found
+$NEPTUNE.NS: possibly delisted; no timezone found
+$NEOCHEM.NS: possibly delisted; no timezone found
+$NMSTEEL.NS: possibly delisted; no timezone found
+
+7 Failed downloads:
+['NIKITA.NS', 'NFPSAMPOOR.NS', 'NRVANDANA.NS', 'NEELAM.NS', 'NEPTUNE.NS', 'NEOCHEM.NS', 'NMSTEEL.NS']: possibly delisted; no timezone found
+  2100/3309    346s  eta  199s
+$PARAMPARA.NS: possibly delisted; no timezone found
+$OSELDEVICE.NS: possibly delisted; no timezone found
+$OPTIMYSTIX.NS: possibly delisted; no timezone found
+$ONYX.NS: possibly delisted; no timezone found
+$PARAMOUNT.NS: possibly delisted; no timezone found
+$PARAMATRIX.NS: possibly delisted; no timezone found
+$PARTH.NS: possibly delisted; no timezone found
+$PATILAUTOM.NS: possibly delisted; no timezone found
+$OPTIVALUE.NS: possibly delisted; no timezone found
+$OBSCP.NS: possibly delisted; no timezone found
+
+10 Failed downloads:
+['PARAMPARA.NS', 'OSELDEVICE.NS', 'OPTIMYSTIX.NS', 'ONYX.NS', 'PARAMOUNT.NS', 'PARAMATRIX.NS', 'PARTH.NS', 'PATILAUTOM.NS', 'OPTIVALUE.NS', 'OBSCP.NS']: possibly delisted; no timezone found
+  2200/3309    363s  eta  183s
+$PRANIK.NS: possibly delisted; no timezone found
+$PHOGLOBAL.NS: possibly delisted; no timezone found
+$PELATRO.NS: possibly delisted; no timezone found
+$POSITRON.NS: possibly delisted; no timezone found
+$PPSL.NS: possibly delisted; no timezone found
+$PRIMECAB.NS: possibly delisted; no timezone found
+$PREMIUM.NS: possibly delisted; no timezone found
+
+7 Failed downloads:
+['PRANIK.NS', 'PHOGLOBAL.NS', 'PELATRO.NS', 'POSITRON.NS', 'PPSL.NS', 'PRIMECAB.NS', 'PREMIUM.NS']: possibly delisted; no timezone found
+  2300/3309    380s  eta  167s
+$RAPIDFLEET.NS: possibly delisted; no timezone found
+$RAPPID.NS: possibly delisted; no timezone found
+$QLINE.NS: possibly delisted; no timezone found
+$QVCEL.NS: possibly delisted; no timezone found
+$PROPSHOP.NS: possibly delisted; no timezone found
+$PURPLEUTED.NS: possibly delisted; no timezone found
+$RAJINDLTD.NS: possibly delisted; no timezone found
+$RAJPUTANA.NS: possibly delisted; no timezone found
+$PUSHPA.NS: possibly delisted; no timezone found
+$PSRAJ.NS: possibly delisted; no timezone found
+$PSFL.NS: possibly delisted; no timezone found
+$PROFX.NS: possibly delisted; no timezone found
+
+12 Failed downloads:
+['RAPIDFLEET.NS', 'RAPPID.NS', 'QLINE.NS', 'QVCEL.NS', 'PROPSHOP.NS', 'PURPLEUTED.NS', 'RAJINDLTD.NS', 'RAJPUTANA.NS', 'PUSHPA.NS', 'PSRAJ.NS', 'PSFL.NS', 'PROFX.NS']: possibly delisted; no timezone found
+  2400/3309    396s  eta  150s
+$RTL.NS: possibly delisted; no timezone found
+$RNPL.NS: possibly delisted; no timezone found
+$ROYALARC.NS: possibly delisted; no timezone found
+$READYMIX.NS: possibly delisted; no timezone found
+$REXPRO.NS: possibly delisted; no timezone found
+$RICHA.NS: possibly delisted; no timezone found
+$RFBL.NS: possibly delisted; no timezone found
+$RNFI.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['RTL.NS', 'RNPL.NS', 'ROYALARC.NS', 'READYMIX.NS', 'REXPRO.NS', 'RICHA.NS', 'RFBL.NS', 'RNFI.NS']: possibly delisted; no timezone found
+  2500/3309    413s  eta  134s
+$SAJHOTELS.NS: possibly delisted; no timezone found
+$SAFEENTP.NS: possibly delisted; no timezone found
+$SACHEEROME.NS: possibly delisted; no timezone found
+$SAWALIYA.NS: possibly delisted; no timezone found
+$SATTVAENGG.NS: possibly delisted; no timezone found
+$SATKARTAR.NS: possibly delisted; no timezone found
+$SAMAY.NS: possibly delisted; no timezone found
+$SDREAMS.NS: possibly delisted; no timezone found
+$SATECH.NS: possibly delisted; no timezone found
+$SAHASRA.NS: possibly delisted; no timezone found
+$SAVY.NS: possibly delisted; no timezone found
+
+11 Failed downloads:
+['SAJHOTELS.NS', 'SAFEENTP.NS', 'SACHEEROME.NS', 'SAWALIYA.NS', 'SATTVAENGG.NS', 'SATKARTAR.NS', 'SAMAY.NS', 'SDREAMS.NS', 'SATECH.NS', 'SAHASRA.NS', 'SAVY.NS']: possibly delisted; no timezone found
+  2600/3309    430s  eta  117s
+$SHYAMDHANI.NS: possibly delisted; no timezone found
+$SFML.NS: possibly delisted; no timezone found
+$SHKSIL.NS: possibly delisted; no timezone found
+$SHETHJI.NS: possibly delisted; no timezone found
+$SHREEDHAR.NS: possibly delisted; no timezone found
+$SHRIAHIMSA.NS: possibly delisted; no timezone found
+$SHEEL.NS: possibly delisted; no timezone found
+$SHIVASHRIT.NS: possibly delisted; no timezone found
+$SELLOWRAP.NS: possibly delisted; no timezone found
+$SHUBHSHREE.NS: possibly delisted; no timezone found
+$SHRIKANHA.NS: possibly delisted; no timezone found
+
+11 Failed downloads:
+['SHYAMDHANI.NS', 'SFML.NS', 'SHKSIL.NS', 'SHETHJI.NS', 'SHREEDHAR.NS', 'SHRIAHIMSA.NS', 'SHEEL.NS', 'SHIVASHRIT.NS', 'SELLOWRAP.NS', 'SHUBHSHREE.NS', 'SHRIKANHA.NS']: possibly delisted; no timezone found
+  2700/3309    446s  eta  101s
+$SIMCA.NS: possibly delisted; no timezone found
+$SIDDHICOTS.NS: possibly delisted; no timezone found
+$SOCL.NS: possibly delisted; no timezone found
+$SPCON.NS: possibly delisted; no timezone found
+$SMARTEN.NS: possibly delisted; no timezone found
+$SNEHAA.NS: possibly delisted; no timezone found
+$SILKY.NS: possibly delisted; no timezone found
+$SPEB.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['SIMCA.NS', 'SIDDHICOTS.NS', 'SOCL.NS', 'SPCON.NS', 'SMARTEN.NS', 'SNEHAA.NS', 'SILKY.NS', 'SPEB.NS']: possibly delisted; no timezone found
+  2800/3309    462s  eta   84s
+$SUNLITE.NS: possibly delisted; no timezone found
+$SSEGL.NS: possibly delisted; no timezone found
+$STUDIOLSD.NS: possibly delisted; no timezone found
+$SPPPOLY.NS: possibly delisted; no timezone found
+$SUBAHOTELS.NS: possibly delisted; no timezone found
+$SPUNWEB.NS: possibly delisted; no timezone found
+$STRIDERS.NS: possibly delisted; no timezone found
+$SUNTECH.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['SUNLITE.NS', 'SSEGL.NS', 'STUDIOLSD.NS', 'SPPPOLY.NS', 'SUBAHOTELS.NS', 'SPUNWEB.NS', 'STRIDERS.NS', 'SUNTECH.NS']: possibly delisted; no timezone found
+  2900/3309    480s  eta   68s
+$TEJA.NS: possibly delisted; no timezone found
+$TECHD.NS: possibly delisted; no timezone found
+$TEJASCARGO.NS: possibly delisted; no timezone found
+$TECHERA.NS: possibly delisted; no timezone found
+$TANKUP.NS: possibly delisted; no timezone found
+$TEAMTECH.NS: possibly delisted; no timezone found
+$THESL.NS: possibly delisted; no timezone found
+$TAURIAN.NS: possibly delisted; no timezone found
+
+8 Failed downloads:
+['TEJA.NS', 'TECHD.NS', 'TEJASCARGO.NS', 'TECHERA.NS', 'TANKUP.NS', 'TEAMTECH.NS', 'THESL.NS', 'TAURIAN.NS']: possibly delisted; no timezone found
+  3000/3309    497s  eta   51s
+$TROM.NS: possibly delisted; no timezone found
+$TSC.NS: possibly delisted; no timezone found
+$UHTL.NS: possibly delisted; no timezone found
+$UNILEX.NS: possibly delisted; no timezone found
+
+4 Failed downloads:
+['TROM.NS', 'TSC.NS', 'UHTL.NS', 'UNILEX.NS']: possibly delisted; no timezone found
+  3100/3309    513s  eta   35s
+$VIESL.NS: possibly delisted; no timezone found
+$VIJAYPD.NS: possibly delisted; no timezone found
+$UTKAL.NS: possibly delisted; no timezone found
+$VALUE360.NS: possibly delisted; no timezone found
+$VIGOR.NS: possibly delisted; no timezone found
+$VGINFOTECH.NS: possibly delisted; no timezone found
+$VICTORYEV.NS: possibly delisted; no timezone found
+$VDEAL.NS: possibly delisted; no timezone found
+$VISDEM.NS: possibly delisted; no timezone found
+$USHAFIN.NS: possibly delisted; no timezone found
+$UTSSAV.NS: possibly delisted; no timezone found
+
+11 Failed downloads:
+['VIESL.NS', 'VIJAYPD.NS', 'UTKAL.NS', 'VALUE360.NS', 'VIGOR.NS', 'VGINFOTECH.NS', 'VICTORYEV.NS', 'VDEAL.NS', 'VISDEM.NS', 'USHAFIN.NS', 'UTSSAV.NS']: possibly delisted; no timezone found
+  3200/3309    529s  eta   18s
+$WOL3D.NS: possibly delisted; no timezone found
+$VLINFRA.NS: possibly delisted; no timezone found
+$VOLERCAR.NS: possibly delisted; no timezone found
+$WHITEFORCE.NS: possibly delisted; no timezone found
+$YAAP.NS: possibly delisted; no timezone found
+$VIVIDEL.NS: possibly delisted; no timezone found
+$VMOBILE.NS: possibly delisted; no timezone found
+
+7 Failed downloads:
+['WOL3D.NS', 'VLINFRA.NS', 'VOLERCAR.NS', 'WHITEFORCE.NS', 'YAAP.NS', 'VIVIDEL.NS', 'VMOBILE.NS']: possibly delisted; no timezone found
+  3300/3309    546s  eta    1s
+  3309/3309    548s  eta    0s
+
+[36m==================================================================
+== 3. result
+==================================================================[0m
+  [32mok  [0m 3,051 cached, 258 no data, 0 errors, 549s
+       0.166s per symbol (the serialised path was ~0.45s)
+       symbols without data written to /opt/breakoutscanner/data_cache/prefetch_no_data.txt
+       e.g. AAKAAR, AARADHYA, ABHAPOWER, ACCPL, ACETEC, ACTIVEINFR, ADDICTIVE, ADISOFT
+
+  [1mNow run the build. It should read cache and finish in a fraction of
+  the time — that comparison is the point, so time it:[0m
+
+      time sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+        /opt/breakoutscanner/build_snapshot.py --symbols-file /opt/breakoutscanner/nse_all_equity.txt
+
+  [33mIf it is still slow, the cache is being rejected rather than missing,
+  and the min_rows threshold is the next thing to change — not this.[0m
+--- building snapshot ---
+Nifty Capital Markets: no constituent file found (24 URLs tried)
+
+[36m== building snapshot: /opt/breakoutscanner/nse_all_equity.txt ==[0m
+  /opt/breakoutscanner/nse_all_equity.txt: 3309 symbols
+  skipping 258 symbol(s) prefetch found no data for (it retries them on its next run)
+  breakout detector: detect_breakout(df, symbol, timeframe, cfg, mode, vol_mult, lookback, atr_period, atr_mult, direction_filter)
+  25/3051      4s  eta  456s
+  50/3051      7s  eta  418s
+  75/3051     10s  eta  404s
+  100/3051     13s  eta  392s
+  125/3051     17s  eta  387s
+  150/3051     20s  eta  387s
+  175/3051     23s  eta  385s
+  200/3051     27s  eta  381s
+  225/3051     30s  eta  380s
+  250/3051     35s  eta  390s
+  275/3051     39s  eta  392s
+  300/3051     42s  eta  387s
+  325/3051     46s  eta  384s
+  350/3051     49s  eta  381s
+  375/3051     53s  eta  377s
+  400/3051     57s  eta  375s
+  425/3051     60s  eta  369s
+  450/3051     63s  eta  366s
+  475/3051     67s  eta  361s
+  500/3051     70s  eta  358s
+  525/3051     74s  eta  354s
+  550/3051     77s  eta  352s
+  575/3051     81s  eta  348s
+  600/3051     85s  eta  345s
+  625/3051     88s  eta  342s
+  650/3051     91s  eta  337s
+  675/3051     95s  eta  333s
+  700/3051     98s  eta  328s
+  725/3051    101s  eta  324s
+  750/3051    104s  eta  320s
+  775/3051    108s  eta  317s
+  800/3051    111s  eta  312s
+  825/3051    114s  eta  309s
+  850/3051    118s  eta  305s
+  875/3051    121s  eta  301s
+  900/3051    124s  eta  297s
+  925/3051    128s  eta  293s
+  950/3051    131s  eta  289s
+  975/3051    134s  eta  285s
+  1000/3051    137s  eta  281s
+  1025/3051    140s  eta  276s
+  1050/3051    142s  eta  271s
+  1075/3051    146s  eta  268s
+  1100/3051    149s  eta  264s
+  1125/3051    152s  eta  261s
+  1150/3051    156s  eta  258s
+  1175/3051    160s  eta  255s
+  1200/3051    163s  eta  252s
+  1225/3051    167s  eta  248s
+  1250/3051    170s  eta  245s
+  1275/3051    174s  eta  242s
+  1300/3051    177s  eta  238s
+  1325/3051    180s  eta  234s
+  1350/3051    183s  eta  231s
+  1375/3051    187s  eta  228s
+  1400/3051    190s  eta  224s
+  1425/3051    193s  eta  220s
+  1450/3051    196s  eta  217s
+  1475/3051    200s  eta  213s
+  1500/3051    203s  eta  210s
+  1525/3051    206s  eta  206s
+  1550/3051    210s  eta  204s
+  1575/3051    214s  eta  200s
+  1600/3051    218s  eta  197s
+  1625/3051    221s  eta  194s
+  1650/3051    224s  eta  191s
+  1675/3051    228s  eta  187s
+  1700/3051    230s  eta  183s
+  1725/3051    234s  eta  180s
+  1750/3051    237s  eta  177s
+  1775/3051    241s  eta  173s
+  1800/3051    244s  eta  169s
+  1825/3051    247s  eta  166s
+  1850/3051    250s  eta  162s
+  1875/3051    254s  eta  159s
+  1900/3051    257s  eta  156s
+  1925/3051    260s  eta  152s
+  1950/3051    263s  eta  149s
+  1975/3051    267s  eta  145s
+  2000/3051    270s  eta  142s
+  2025/3051    273s  eta  139s
+  2050/3051    277s  eta  135s
+  2075/3051    280s  eta  132s
+  2100/3051    283s  eta  128s
+  2125/3051    287s  eta  125s
+  2150/3051    289s  eta  121s
+  2175/3051    293s  eta  118s
+  2200/3051    296s  eta  115s
+  2225/3051    300s  eta  111s
+  2250/3051    303s  eta  108s
+  2275/3051    306s  eta  104s
+  2300/3051    309s  eta  101s
+  2325/3051    312s  eta   98s
+  2350/3051    316s  eta   94s
+  2375/3051    319s  eta   91s
+  2400/3051    323s  eta   88s
+  2425/3051    326s  eta   84s
+  2450/3051    329s  eta   81s
+  2475/3051    333s  eta   77s
+  2500/3051    337s  eta   74s
+  2525/3051    341s  eta   71s
+  2550/3051    345s  eta   68s
+  2575/3051    349s  eta   65s
+  2600/3051    353s  eta   61s
+  2625/3051    357s  eta   58s
+  2650/3051    360s  eta   55s
+  2675/3051    364s  eta   51s
+  2700/3051    367s  eta   48s
+  2725/3051    370s  eta   44s
+  2750/3051    374s  eta   41s
+  2775/3051    377s  eta   37s
+  2800/3051    380s  eta   34s
+  2825/3051    384s  eta   31s
+  2850/3051    387s  eta   27s
+  2875/3051    391s  eta   24s
+  2900/3051    394s  eta   21s
+  2925/3051    398s  eta   17s
+  2950/3051    402s  eta   14s
+  2975/3051    405s  eta   10s
+  3000/3051    409s  eta    7s
+  3025/3051    412s  eta    4s
+  3050/3051    415s  eta    0s
+  [33mnote[0m  310 symbol(s) did not trade on 2026-08-14 — flagged traded_today = false
+  cap bands: Below Microcap 2301, Small 250, Micro 250, Mid 150, Large 100
+  [32mok[0m  3051 of 3051 obtainable symbols (100.0% coverage), 0 skipped, 488s
+        257 known-unavailable excluded (no data for 3+ runs); raw coverage 100.0% of 3051
+        data as of 2026-08-14, 310 symbol(s) behind it
+  [31mstale[0m 310 symbol(s) (10%) use prices older than 2026-08-14, oldest 2026-08-12
+        Normal for illiquid names: they did not trade, so no bar exists. All are flagged traded_today = false and excluded from 'today' screens by default.
+          GSEC10ABSL     2026-08-12
+          LIQUIDBETA     2026-08-12
+          AATMAJ         2026-08-13
+          ABSMARINE      2026-08-13
+          ACCENTMIC      2026-08-13
+          ACCORD         2026-08-13
+          AGARWALFT      2026-08-13
+          AGNI           2026-08-13
+  [32mok[0m  breakouts: 403 total · 260 bullish · 143 bearish
+        1D: 134
+        1W: 230
+        1M: 191
+        Compare these against your live scan. They call the
+        SAME detect_breakout(), so they should agree exactly.
+  [32mok[0m  wrote 3051 rows for 2026-08-14  (5 day(s) of history)
+       /opt/breakoutscanner/data_cache/snapshot.duckdb
+
+[36m  predefined scanners against this snapshot:[0m
+    Horizontal Resistance             500
+    Tight Setup (Daily)               171
+    VCP                               470
+    RS High Before Price High          90
+    Flags & Pennants                  240
+    Inside Bar (Daily)                500
+    21 EMA Shakeout                    43
+    Gap Up (Unfilled)                 500
+    Volume Gainers                    425
+    Recent IPO Setups                 171
+    Minervini Trend Template          500
+    ★ Daily Screen — breakout in a strong stock   66
+
+  Open the Screener page in the app to query it interactively.
+wrote 3051 rows for 2026-08-14  (92% of 3309)
+=== DEGRADED: 92% coverage ===
+=== finished 2026-08-14T13:17:42+00:00 ===
