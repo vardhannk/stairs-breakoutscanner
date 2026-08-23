@@ -1,0 +1,418 @@
+"""
+columns_help.py — column dictionary, in-app help, and a selection-criteria panel.
+
+The scan now produces ~50 columns. Without a single place that says what each
+one means and which of them you are actually filtering on, "what were my
+selection criteria?" becomes unanswerable a month from now.
+
+Three things live here:
+
+  COLUMNS         one entry per column: display name, group, one-line meaning,
+                  how to read it, and the source it comes from
+  render_help()   Streamlit expander rendering that as a table
+  render_criteria_panel()
+                  shows which criteria are ACTIVE right now and what each one
+                  removed, using screen.filter_report()
+
+Import is optional everywhere — if streamlit is absent the data structures
+still work, so the same dictionary can generate the markdown reference doc.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+import pandas as pd
+
+# group order controls display order
+GROUPS = [
+    "Identity",
+    "Breakout",
+    "Relative strength",
+    "Trend / Minervini",
+    "Liquidity",
+    "Highs",
+    "Listing",
+    "Machine learning",
+    "Sequence",
+]
+
+# column -> (display name, group, what it is, how to read it, source)
+COLUMNS: dict[str, tuple[str, str, str, str, str]] = {
+    # ── Identity ────────────────────────────────────────────────────────
+    "symbol": ("Symbol", "Identity", "NSE trading symbol", "—", "universe list"),
+    "sector": ("Sector", "Identity", "Primary NSE sectoral index the stock belongs to",
+               "A stock in several indices gets the most SPECIFIC one — RELIANCE shows Oil & Gas, not Commodities. See sectors_all for the rest",
+               "sectors.py"),
+    "sectors_all": ("All Sectors", "Identity", "Every sectoral index containing this stock",
+                    "Membership overlaps by design; breadth here means the name shows up in several themes",
+                    "sectors.py"),
+    "industry": ("Industry", "Identity", "NSE macro-economic sector (20 buckets)",
+                 "Coarser than `sector`. From the constituent CSV's Industry column",
+                 "universes.py"),
+    "timeframe": ("Timeframe", "Identity", "Bar size the breakout was detected on",
+                  "1H / 1D / 1W / 1M", "scan setting"),
+    "direction": ("Direction", "Identity", "Bullish = broke resistance, bearish = broke support",
+                  "—", "breakout.py"),
+    "mode": ("Mode", "Identity", "Standard, or Strict which adds an ATR-expansion test",
+             "Strict is a narrower net", "scan setting"),
+    "bar_time": ("Bar Date", "Identity", "Date of the bar that triggered the signal",
+                 "If this is today and the market is open, the bar is INCOMPLETE and can repaint",
+                 "price data"),
+
+    # ── Breakout ────────────────────────────────────────────────────────
+    "close": ("Close", "Breakout", "Closing price of the signal bar", "—", "price data"),
+    "level": ("Break Level", "Breakout", "The Donchian level that was crossed",
+              "Resistance for bullish, support for bearish", "breakout.py"),
+    "breakout_pct": ("Break %", "Breakout", "How far past the level the close is",
+                     "Avoid paying more than ~2% above the level. Small = early, large = extended",
+                     "breakout.py"),
+    "lookback": ("Lookback", "Breakout", "Donchian window in bars",
+                 "20 on 1D = a new one-month high", "config.py"),
+    "prior_high": ("Prior High", "Breakout", "Highest high of the lookback window", "—", "breakout.py"),
+    "prior_low": ("Prior Low", "Breakout", "Lowest low of the lookback window", "—", "breakout.py"),
+    "strong_close": ("Strong Close", "Breakout", "Close finished in the top 60% of the bar's range",
+                     "Weak closes are filtered out before you see them", "breakout.py"),
+    "true_range": ("True Range", "Breakout", "Bar range including gaps (strict mode only)", "—", "breakout.py"),
+    "atr": ("ATR(14)", "Breakout", "14-bar average true range (strict mode only)", "—", "breakout.py"),
+    "tr_atr_ratio": ("TR/ATR", "Breakout", "Bar range vs recent average (strict mode only)",
+                     "Strict requires > 1.2. Higher = more decisive bar", "breakout.py"),
+
+    # ── Relative strength ───────────────────────────────────────────────
+    "ret_3m": ("3m Return", "Relative strength", "Stock return over 63 trading days",
+               "Raw return, not yet compared to anything", "screen.py"),
+    "ret_1m": ("1m Return", "Relative strength", "Stock return over 21 trading days",
+               "Short window. Needs only 22 bars, so it works on IPOs where RS Rating cannot",
+               "screen.py"),
+    "rs_1m_vs_nifty": ("RS 1m vs NIFTY", "Relative strength",
+                       "1-month return minus NIFTY's, in percentage points",
+                       "> 0 beats the index over the last month. Faster to react than the 3m version",
+                       "screen.py"),
+    "ret_1m_rank": ("1m Rank", "Relative strength", "Percentile of the 1-month return across the scanned universe",
+                    "This IS 'top monthly gainers'. 90+ = top 10% of what you scanned. Survives an IPO scan",
+                    "screen.py"),
+    "rs_vs_nifty": ("RS vs NIFTY", "Relative strength",
+                    "3-month return minus NIFTY's, in percentage points",
+                    "> 0 beats the index. In a flat index this is a LOW bar — NIFTY was +1.02% last quarter",
+                    "screen.py"),
+    "rs_rank": ("RS Rank", "Relative strength", "Percentile of RS vs NIFTY across the scanned universe",
+                "0-100. Only meaningful on 50+ symbols", "screen.py"),
+    "mansfield_rs": ("Mansfield RS", "Relative strength",
+                     "(stock/index ratio vs its own 200-bar average − 1) × 100",
+                     "ZERO is the line. Catches stocks TURNING outperformer, which a plain return misses. Weinstein's measure",
+                     "screen.py"),
+    "oneil_score": ("O'Neil Score", "Relative strength",
+                    "2×(3m) + 6m + 9m + 12m return — raw, before ranking",
+                    "Input to RS Rating; not useful on its own", "screen.py"),
+    "rs_rating": ("RS Rating", "Relative strength", "O'Neil score percentile-ranked 1-99",
+                  "O'Neil wanted 80+. Needs 252 bars, so NaN for recent listings",
+                  "screen.py"),
+
+    # ── Trend / Minervini ───────────────────────────────────────────────
+    "dma50": ("50 DMA", "Trend / Minervini", "50-day simple moving average", "—", "screen.py"),
+    "dma150": ("150 DMA", "Trend / Minervini", "150-day simple moving average", "—", "screen.py"),
+    "dma200": ("200 DMA", "Trend / Minervini", "200-day simple moving average", "—", "screen.py"),
+    "above_50dma": ("> 50 DMA", "Trend / Minervini", "Close is above the 50 DMA",
+                    "Common momentum criterion", "screen.py"),
+    "dma200_rising": ("200 DMA Rising", "Trend / Minervini", "200 DMA higher than a month ago",
+                      "Minervini criterion 3", "screen.py"),
+    "minervini_score": ("Minervini", "Trend / Minervini", "How many of the 8 Trend Template criteria pass",
+                        "0-8. 7/8 failing only on RS is very different from 3/8",
+                        "screen.py"),
+    "minervini_pass": ("Minervini 8/8", "Trend / Minervini", "All eight criteria pass",
+                       "Rare. A strict definition of a leader", "screen.py"),
+    "mv1": ("MV1 >150&200", "Trend / Minervini", "Price above both 150 and 200 DMA", "—", "screen.py"),
+    "mv2": ("MV2 150>200", "Trend / Minervini", "150 DMA above 200 DMA", "—", "screen.py"),
+    "mv3": ("MV3 200 rising", "Trend / Minervini", "200 DMA trending up ≥1 month", "—", "screen.py"),
+    "mv4": ("MV4 50>150&200", "Trend / Minervini", "50 DMA above both", "—", "screen.py"),
+    "mv5": ("MV5 >50dma", "Trend / Minervini", "Price above 50 DMA", "—", "screen.py"),
+    "mv6": ("MV6 +30% off low", "Trend / Minervini", "≥30% above the 52-week low", "—", "screen.py"),
+    "mv7": ("MV7 ≥75% of high", "Trend / Minervini", "Within 25% of the 52-week high", "—", "screen.py"),
+    "mv8": ("MV8 RS≥70", "Trend / Minervini", "RS Rating at least 70", "—", "screen.py"),
+
+    # ── Liquidity ───────────────────────────────────────────────────────
+    "price": ("Price", "Liquidity", "Latest close", "Liquidity floor: ≥ ₹100", "screen.py"),
+    "volume_ratio": ("Vol Ratio", "Liquidity", "Signal bar volume ÷ 20-bar average",
+                     "RELATIVE surge — 'unusual for this stock'. A thin stock can show 50× on one block trade",
+                     "breakout.py"),
+    "avg_vol_10d": ("Avg Vol 10d", "Liquidity", "Mean volume of the last 10 COMPLETED sessions",
+                    "ABSOLUTE floor — 'tradeable at all'. Threshold: ≥ 100,000. This is what kills the 50× artifacts",
+                    "screen.py"),
+    "turnover_10d": ("Turnover 10d", "Liquidity", "avg_vol_10d × price, in rupees",
+                     "₹100 price + 100k volume implies ≥ ₹1 crore daily turnover", "screen.py"),
+    "vol_today_extrapolated": ("Vol (full-day est.)", "Liquidity",
+                               "Partial-session volume scaled to a full day",
+                               "Mid-session only. 30k by 09:30 against a 1 lakh average is healthy",
+                               "screen.py"),
+    "circuit_suspect": ("Circuit?", "Liquidity", "Bar looks locked at an upper/lower circuit",
+                        "Heuristic: frozen bar, or pinned to a 5/10/20% band with almost no range",
+                        "screen.py"),
+
+    # ── Highs ───────────────────────────────────────────────────────────
+    "is_52w_high": ("52W High?", "Highs", "Close is at a new 52-week high", "—", "breakout.py"),
+    "pct_of_52w_high": ("% of 52w High", "Highs", "Close as a percentage of the 52-week high",
+                        "Minervini wants ≥ 75%. A 20-day high at 45% of the 52w high is a bounce in a downtrend",
+                        "screen.py"),
+    "pct_of_52w_low": ("% off 52w Low", "Highs", "How far above the 52-week low",
+                       "Minervini wants ≥ 30%", "screen.py"),
+    "ath": ("ATH", "Highs", "Highest high in the full available history", "—", "screen.py"),
+    "pct_of_ath": ("% of ATH", "Highs", "Close as a percentage of the all-time high",
+                   "100% = at all-time highs", "screen.py (deep fetch)"),
+    "at_ath": ("At ATH?", "Highs", "Within 0.1% of the all-time high", "—", "screen.py"),
+    "ath_history_bars": ("ATH History", "Highs", "Bars of history the ATH was computed from",
+                         "Small number = shallow history, treat the ATH with suspicion", "screen.py"),
+
+    # ── Listing ─────────────────────────────────────────────────────────
+    "bars_available": ("Bars", "Listing", "Daily bars available for this symbol",
+                       "Below 60 the scanner cannot fire at all", "screen.py"),
+    "approx_listing_days": ("Listing Age", "Listing", "Approximate sessions since listing",
+                            "Inferred from bar count — no listings feed needed", "screen.py"),
+    "pct_of_listing_range": ("% of Listing Range", "Listing",
+                            "Where price sits vs the FIRST WEEK of trading",
+                            "100 = top of the listing range, >100 = broken above it entirely, <0 = below it. Very large values mean a NARROW listing week, so the denominator is small — read alongside ret_1m. Only computed for recent listings; for an old stock the first bars are just 440 days ago, not its listing",
+                            "screen.py"),
+    "is_recent_listing": ("IPO (<1yr)", "Listing", "Between 60 and 252 bars of history",
+                          "IPO scan. These have NaN for Mansfield / RS Rating / Minervini — combining an IPO scan with an RS filter returns zero",
+                          "screen.py"),
+
+    # ── ML ──────────────────────────────────────────────────────────────
+    "ml_confidence": ("ML Confidence", "Machine learning",
+                      "RandomForest probability that the setup reaches +3% before −2.5% within 10 bars",
+                      "A RANKING, not a probability — the model is poorly calibrated (Brier 0.247). Out-of-sample AUC 0.530. Its value is the BOTTOM decile (32% win rate vs 38% base), not the top",
+                      "ml_engine.py"),
+
+    # ── the sequence ────────────────────────────────────────────────────
+    "setup": ("Setup", "Sequence",
+              "Gates passed, out of the gates that could be evaluated",
+              "Reads 4/4 rather than 4/5 when one gate had no data. The denominator is the honest part — a recent listing has no 52-week high, and counting that as a failure would rank every IPO last for a reason that is not about the stock",
+              "screen.py add_setup()"),
+    "setup_grade": ("Grade", "Sequence", "A / B / C / D from the gate count",
+                    "A requires all five gates checked AND passed. Unknown gates cap the grade at B on purpose — a row with two unchecked gates is not making the same claim as a genuine 5/5",
+                    "screen.py add_setup()"),
+    "setup_flags": ("Flags", "Sequence",
+                    "One character per gate, in order: Liquid · Sector · Leader · Near high · Not extended",
+                    "✓ pass, ✗ fail, · could not be evaluated. Built for scanning a table with your eyes rather than sorting",
+                    "screen.py add_setup()"),
+    "setup_score": ("Gates Passed", "Sequence", "Count of gates passed (0-5)",
+                    "Sortable version of `setup`. Compare against setup_judged before reading it — a 3 out of 3 and a 3 out of 5 are different rows",
+                    "screen.py add_setup()"),
+    "setup_fails": ("Gates Failed", "Sequence", "Count of gates that were checked and failed",
+                    "The shortlist is `setup_fails == 0` with at least 3 gates judged. Filtering on this rather than on setup_score is what keeps recent listings eligible",
+                    "screen.py add_setup()"),
+    "setup_judged": ("Gates Checked", "Sequence", "How many of the five could be evaluated",
+                     "Below 5 means data was missing, almost always a sub-year listing",
+                     "screen.py add_setup()"),
+    "setup_missing": ("Missing", "Sequence", "Which gates did not pass, and why",
+                      "'(no data)' distinguishes an unanswerable gate from a failed one. Read this before the grade",
+                      "screen.py add_setup()"),
+}
+
+
+def rename_map() -> dict:
+    """column -> display name, for _style_results."""
+    return {k: v[0] for k, v in COLUMNS.items()}
+
+
+def help_frame(group: Optional[str] = None) -> pd.DataFrame:
+    rows = []
+    for col, (disp, grp, what, how, src) in COLUMNS.items():
+        if group and grp != group:
+            continue
+        rows.append({"Column": disp, "Group": grp, "Field": col,
+                     "What it is": what, "How to read it": how, "Source": src})
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    df["_g"] = df["Group"].map({g: i for i, g in enumerate(GROUPS)}).fillna(99)
+    return df.sort_values(["_g", "Column"]).drop(columns="_g").reset_index(drop=True)
+
+
+def to_markdown() -> str:
+    """The same dictionary as a standalone reference document."""
+    out = ["# Breakout Scanner — Column Reference", ""]
+    for g in GROUPS:
+        sub = help_frame(g)
+        if sub.empty:
+            continue
+        out += [f"## {g}", "", "| Column | Field | What it is | How to read it |",
+                "|---|---|---|---|"]
+        for _, r in sub.iterrows():
+            out.append(f"| **{r['Column']}** | `{r['Field']}` | {r['What it is']} | {r['How to read it']} |")
+        out.append("")
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
+# Streamlit rendering
+# ---------------------------------------------------------------------------
+def render_help() -> None:
+    """Expander with the full column dictionary, grouped."""
+    import streamlit as st
+    with st.expander("📖 Column reference — what every field means", expanded=False):
+        st.caption(
+            "The scan produces ~50 columns. This is the single source of truth for "
+            "what each one is and how to read it."
+        )
+        tabs = st.tabs(GROUPS)
+        for tab, g in zip(tabs, GROUPS):
+            with tab:
+                sub = help_frame(g)
+                if sub.empty:
+                    st.info("No columns in this group.")
+                else:
+                    st.dataframe(sub[["Column", "Field", "What it is", "How to read it"]],
+                                 hide_index=True, use_container_width=True)
+
+
+ACTIVE_CRITERIA_KEY = "active_selection_criteria"
+
+# The core screen: liquidity and basic trend. Always applied, because a name
+# that fails these is not tradeable regardless of which school you follow.
+CORE_DEFAULTS = dict(
+    min_price=100.0,
+    min_avg_vol_10d=100_000.0,
+    require_rs_positive=True,
+    require_above_50dma=True,
+    exclude_circuit=True,
+)
+
+# One overlay on top. These are different schools reading the same data, so
+# stacking them is usually redundant — pick the one matching how you trade.
+OVERLAYS = {
+    "None — core screen only": {},
+    "O'Neil · RS Rating ≥ 80": dict(min_rs_rating=80.0),
+    "Minervini · Trend Template ≥ 7/8": dict(min_minervini_score=7),
+    "Weinstein · Mansfield RS > 0": dict(min_mansfield_rs=0.0),
+    "Momentum · 1m rank ≥ 90": dict(min_ret_1m_rank=90.0),
+}
+
+# Overlays that need history a sub-year listing does not have. Selected
+# alongside an IPO scan they would return zero rows, so they are disabled.
+OVERLAYS_NEED_LONG_HISTORY = {
+    "O'Neil · RS Rating ≥ 80",
+    "Minervini · Trend Template ≥ 7/8",
+    "Weinstein · Mansfield RS > 0",
+}
+
+LISTING_CHOICES = {"Any": None, "IPO only (<1yr)": True, "Exclude IPOs": False}
+
+
+def render_criteria_panel(df=None) -> dict:
+    """
+    Core screen + one overlay.
+
+    Nine independent toggles asked you to know which school each rule came
+    from. This asks one question instead: which style are you screening for?
+    The underlying filters are unchanged — only the way they are chosen.
+
+    Returns the thresholds actually applied, and records them in
+    st.session_state so "what were my criteria?" stays answerable later.
+    """
+    import streamlit as st
+    try:
+        import screen
+    except ImportError:
+        st.warning("screen.py not installed — selection criteria unavailable.")
+        return {}
+
+    with st.expander("🎯 Selection criteria", expanded=False):
+        c1, c2 = st.columns([3, 2])
+        with c1:
+            overlay_name = st.selectbox(
+                "Style overlay", list(OVERLAYS), index=0, key="cr_overlay",
+                help="One school on top of the core screen. They overlap "
+                     "heavily — stacking them mostly just returns nothing.")
+        with c2:
+            listing = st.selectbox("Listing", list(LISTING_CHOICES),
+                                   index=0, key="cr_listing")
+
+        ipo_mode = LISTING_CHOICES[listing] is True
+        overlay = dict(OVERLAYS[overlay_name])
+        if ipo_mode and overlay_name in OVERLAYS_NEED_LONG_HISTORY:
+            st.info(
+                f"**{overlay_name.split(' ·')[0]} disabled in IPO mode.** Sub-year "
+                "listings have no 200/252-bar history, so that overlay would "
+                "return zero rows. Momentum (1m rank) is the one that works on "
+                "recent listings.")
+            overlay = {}
+
+        core = dict(CORE_DEFAULTS)
+        with st.popover("⚙ Core thresholds") if hasattr(st, "popover") \
+                else st.expander("⚙ Core thresholds", expanded=False):
+            st.caption("Always applied. Untick to drop one entirely.")
+            if st.checkbox("Price ≥", value=True, key="cr_use_price"):
+                core["min_price"] = st.number_input(
+                    "₹", 0.0, 100000.0, 100.0, 10.0, key="cr_price_v")
+            else:
+                core["min_price"] = None
+            if st.checkbox("10-day avg volume ≥", value=True, key="cr_use_vol"):
+                core["min_avg_vol_10d"] = st.number_input(
+                    "shares", 0.0, 1e8, 100_000.0, 10_000.0, key="cr_vol_v")
+            else:
+                core["min_avg_vol_10d"] = None
+            core["require_rs_positive"] = st.checkbox(
+                "RS vs NIFTY > 0", value=True, key="cr_rs")
+            core["require_above_50dma"] = st.checkbox(
+                "Close > 50 DMA", value=True, key="cr_dma")
+            core["exclude_circuit"] = st.checkbox(
+                "Exclude circuit-locked", value=True, key="cr_circ")
+
+        params = dict(core)
+        params.update(overlay)
+        params["recent_listing"] = LISTING_CHOICES[listing]
+        st.session_state[ACTIVE_CRITERIA_KEY] = params
+
+        bits = []
+        if params.get("min_price"):
+            bits.append(f"price ≥ {params['min_price']:,.0f}")
+        if params.get("min_avg_vol_10d"):
+            bits.append(f"10d vol ≥ {params['min_avg_vol_10d']:,.0f}")
+        if params.get("require_rs_positive"):
+            bits.append("RS > 0")
+        if params.get("require_above_50dma"):
+            bits.append("> 50 DMA")
+        if params.get("exclude_circuit"):
+            bits.append("no circuit")
+        core_txt = " · ".join(bits) if bits else "none"
+        over_txt = overlay_name.split(" ·")[0] if overlay else "None"
+        st.markdown(f"**Core:** {core_txt}  \n**Overlay:** {over_txt}"
+                    f"{'' if listing == 'Any' else '  ·  **Listing:** ' + listing}")
+
+        if df is not None and not df.empty:
+            st.markdown("**What each criterion removes** (one at a time):")
+            rep = screen.filter_report(df,
+                                       min_price=params.get("min_price") or 0,
+                                       min_avg_vol_10d=params.get("min_avg_vol_10d") or 0)
+            if not rep.empty:
+                st.dataframe(rep, hide_index=True, use_container_width=True)
+
+            kept = screen.apply_filters(df, **params)
+            if ipo_mode and not kept.empty:
+                kept = screen.rerank(kept)   # ranks relative to the IPOs, not 500 stocks
+                st.caption("Ranks recomputed across the filtered IPOs only.")
+            st.success(f"{len(kept)} of {len(df)} rows pass.")
+
+            if not kept.empty:
+                pref = (["symbol", "sector", "close", "breakout_pct", "ret_1m",
+                         "ret_1m_rank", "pct_of_listing_range", "approx_listing_days",
+                         "avg_vol_10d"] if ipo_mode else
+                        [
+                            "symbol",
+                            "rs_rating",
+                            "sector",
+                            "close",
+                            "breakout_pct",
+                            "rs_vs_nifty",
+                            "mansfield_rs",
+                            "ret_1m_rank",
+                            "pct_of_52w_high",
+                            "minervini_score",
+                            "avg_vol_10d",
+                        ])
+                st.dataframe(kept[[c for c in pref if c in kept.columns]].round(2),
+                             hide_index=True, use_container_width=True)
+        return params
+
+
+if __name__ == "__main__":
+    print(to_markdown())

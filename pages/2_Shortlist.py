@@ -1,0 +1,254 @@
+"""
+Shortlist — the six-step sequence, as one page.
+
+Goes in /opt/breakoutscanner/pages/2_Shortlist.py
+
+The sequence used to live in a document: check which sectors lead, run the
+scan, apply the core screen, sort by relative strength, keep the leading
+sectors, then look at how extended each one is. Six steps across two pages
+and a table with 51 columns.
+
+This page runs all six and shows the count surviving each one, so the answer
+is a handful of names with a reason attached rather than a spreadsheet.
+
+The scoring is a checklist with a counter — five yes/no gates, defined in
+screen.py. It is not a model and makes no probability claim. A 5/5 means
+"nothing obvious is wrong with it", which is a weak statement, deliberately.
+
+app.py is not modified. Delete pages/ and the app is exactly as it was.
+"""
+
+import os
+import sys
+
+import pandas as pd
+import streamlit as st
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+st.set_page_config(page_title="Shortlist", page_icon="🎯", layout="wide")
+
+try:
+    import screen
+    import sectors
+    import ui_theme as T
+    from data_loader import load_daily
+except Exception as e:                                  # pragma: no cover
+    st.error(f"Could not import a required module: {e}")
+    st.stop()
+
+T.apply()
+
+st.title("🎯 Shortlist")
+st.caption("The scan, narrowed by the five checks — in order, with the count "
+           "surviving each one.")
+
+# ── inputs ─────────────────────────────────────────────────────────────────
+with st.container():
+    c1, c2, c3 = st.columns([1, 1.6, 1])
+    with c1:
+        window = st.selectbox("Sector window", sectors.WINDOW_ORDER, index=2,
+                              help="Which horizon decides a 'leading' sector. "
+                                   "1M is the usual choice for swing setups.")
+    with c2:
+        basis = st.radio(
+            "Sector basis", ["Scanned universe", "NSE indices"],
+            horizontal=True,
+            help="NSE sectoral indices are large-cap. If you scanned Smallcap "
+                 "or Microcap 250, 'Scanned universe' compares like with like.")
+    with c3:
+        top_n = st.number_input("Leading sectors", 1, 12, 5, 1)
+
+# ── data ───────────────────────────────────────────────────────────────────
+try:
+    from results_store import load_scan_results
+    _res = load_scan_results()
+    scan = _res[0] if isinstance(_res, tuple) else _res
+except Exception as e:
+    scan = None
+    st.info(f"No cached scan results ({e}). Run a scan on the main page first.")
+
+if scan is None or scan.empty:
+    st.stop()
+
+# Bearish breakdowns are a different trade with different rules; this page is
+# about long setups only, so they are removed before anything is counted.
+if "direction" in scan.columns:
+    scan = scan[scan["direction"].astype(str).str.lower().str.startswith("bull")]
+if scan.empty:
+    st.warning("The last scan contained no bullish breakouts.")
+    st.stop()
+
+if "sector" not in scan.columns or not scan["sector"].astype(bool).any():
+    scan = sectors.tag_scan_with_sector(scan)
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def _index_perf():
+    return sectors.sector_performance(
+        loader=lambda s: load_daily(s, use_cache=True), include_baskets=False)
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def _universe_perf(symbols: tuple):
+    return sectors.sector_performance_for_universe(
+        list(symbols), loader=lambda s: load_daily(s, use_cache=True))
+
+
+with st.spinner("Loading sector performance…"):
+    if basis == "Scanned universe":
+        syms = tuple(sorted({str(s).upper() for s in scan["symbol"]}))
+        perf = _universe_perf(syms)
+        if perf is None or perf.empty:
+            st.warning("Not enough constituents per sector in this scan to "
+                       "compute universe-relative sector returns — falling "
+                       "back to the NSE indices.")
+            perf = _index_perf()
+    else:
+        perf = _index_perf()
+
+lead = sectors.leading_sectors(perf, window=window, top_n=int(top_n),
+                               positive_only=True) if perf is not None and not perf.empty else []
+
+if not lead:
+    st.warning(f"**No sector is positive over {window}.** The sector gate is "
+               "reported as not-passed for every row below rather than being "
+               "quietly skipped. In a market like this the top-down step is "
+               "telling you something.")
+
+# ── the sequence ───────────────────────────────────────────────────────────
+n_raw = len(scan)
+core = screen.apply_filters(scan, **{k: v for k, v in
+                                     dict(min_price=100.0,
+                                          min_avg_vol_10d=100_000.0,
+                                          require_rs_positive=True,
+                                          require_above_50dma=True,
+                                          exclude_circuit=True).items()})
+n_core = len(core)
+
+scored = screen.add_setup(core, leading_sectors=lead) if not core.empty else core
+if not scored.empty:
+    scored = scored.sort_values(
+        ["setup_score", "ret_1m_rank"], ascending=[False, False],
+        na_position="last").reset_index(drop=True)
+
+n_sector = int((scored["setup_flags"].str[1] == "✓").sum()) if not scored.empty else 0
+shortlist = scored[screen.shortlist_mask(scored)] if not scored.empty else scored
+n_short = len(shortlist)
+
+st.markdown(T.funnel([
+    (n_raw, "Breakouts", "bullish, last scan"),
+    (n_core, "Core screen", "liquid · above 50 DMA · RS &gt; 0"),
+    (n_sector, "Leading sector", f"top {int(top_n)} over {window}"),
+    (n_short, "Shortlist", "no gate failed"),
+]), unsafe_allow_html=True)
+
+if lead:
+    st.markdown(
+        '<div class="legend">'
+        + "".join(f'<span class="legend-i">{s}</span>' for s in lead)
+        + "</div>", unsafe_allow_html=True)
+
+st.markdown(
+    '<div class="legend">'
+    + "".join(f'<span class="legend-i"><b>{i+1}</b> {g}</span>'
+              for i, g in enumerate(screen.SETUP_GATES))
+    + '<span class="legend-i">✓ pass · ✗ fail · · no data</span></div>',
+    unsafe_allow_html=True)
+
+if scored.empty:
+    st.info("Nothing survived the core screen. That is a result, not an error — "
+            "it usually means the breakouts in this scan were in illiquid names "
+            "or below their 50-day average.")
+    st.stop()
+
+# ── cards ──────────────────────────────────────────────────────────────────
+st.subheader("Top candidates")
+
+show = shortlist if not shortlist.empty else scored.head(5)
+if shortlist.empty:
+    st.caption("No row cleared every checkable gate. Showing the five closest "
+               "so you can see what they are missing.")
+
+for _, r in show.head(12).iterrows():
+    grade = r.get("setup_grade", "D")
+    col = T.GRADE_COLORS.get(grade, T.MUTED)
+    miss = r.get("setup_missing") or ""
+    fields = [
+        ("Breakout", T.pct(r.get("breakout_pct"))),
+        ("1m rank", T.num(r.get("ret_1m_rank"), 0)),
+        ("RS rating", T.num(r.get("rs_rating"), 0)),
+        ("% of 52w high", T.pct(r.get("pct_of_52w_high"), 1, sign=False)),
+        ("10d avg vol", T.num(r.get("avg_vol_10d"), 0)),
+        ("Close", T.num(r.get("close"), 2)),
+    ]
+    st.markdown(
+        f'<div class="card">'
+        f'<div class="card-top">'
+        f'<span class="card-sym">{r.get("symbol", "?")}</span>'
+        f'{T.badge(str(r.get("setup", "—")) + "  " + grade, col)}'
+        f'<span class="flags" style="color:{col}">{r.get("setup_flags", "")}</span>'
+        f'<span class="card-sec">{r.get("sector") or "sector unknown"}'
+        f' · {r.get("timeframe", "")}</span>'
+        f"</div>"
+        f'<div class="card-row">'
+        + "".join(f'<div class="card-kv"><span class="card-k">{k}</span>'
+                  f'<span class="card-v">{v}</span></div>' for k, v in fields)
+        + "</div>"
+        + (f'<div class="card-miss">Missing: {miss}</div>' if miss else "")
+        + "</div>",
+        unsafe_allow_html=True)
+
+# ── table ──────────────────────────────────────────────────────────────────
+st.subheader("All rows that passed the core screen")
+cols = [c for c in [
+    "symbol",
+    "rs_rating",
+    "setup",
+    "setup_grade",
+    "setup_flags",
+    "sector",
+    "timeframe",
+    "close",
+    "breakout_pct",
+    "ret_1m_rank",
+    "pct_of_52w_high",
+    "minervini_score",
+    "avg_vol_10d",
+    "volume_ratio",
+    "setup_missing",
+]
+        if c in scored.columns]
+st.dataframe(scored[cols].round(2), hide_index=True, use_container_width=True)
+
+st.download_button("Download shortlist (CSV)",
+                   scored[cols].to_csv(index=False).encode(),
+                   file_name="shortlist.csv", mime="text/csv")
+
+# ── what the liquidity gate actually removed ───────────────────────────────
+thin = screen.thin_volume_artifacts(scan)
+with st.expander(f"Liquidity gate: {len(thin)} thin-volume rows in this scan"):
+    st.caption(
+        "Rows with a volume ratio of 3x or more whose 10-day average volume is "
+        "still under 100,000 shares — a large spike on a base so small the "
+        "spike is one order. These sort to the top of an unfiltered scan "
+        "precisely because the ratio is high. If this count is usually zero, "
+        "the liquidity gate is not earning its place and you should say so.")
+    if thin.empty:
+        st.success("None in this scan.")
+    else:
+        tcols = [c for c in ["symbol", "sector", "close", "volume_ratio",
+                             "avg_vol_10d", "breakout_pct"] if c in thin.columns]
+        st.dataframe(thin[tcols].round(2), hide_index=True,
+                     use_container_width=True)
+
+with st.expander("What each gate checks"):
+    for i, g in enumerate(screen.SETUP_GATES, 1):
+        st.markdown(f"**{i}. {g}** — {screen.SETUP_GATE_HELP[g]}")
+    st.caption(
+        "Thresholds are conventions, not fitted parameters. Nothing here was "
+        "optimised against historical returns, so the score carries no claim "
+        "about what happens next — it only says how many of five plain "
+        "conditions a row meets.")

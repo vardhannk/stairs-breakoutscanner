@@ -1,0 +1,255 @@
+"""
+Today — the only page you need on a normal day.
+
+Goes in /opt/breakoutscanner/pages/0_Today.py  (leading 0 = first in the nav)
+
+One screen. No filter configuration. The 63 measurements and 15 scanners are
+the ENGINE — you never see them here, the same way you do not configure fuel
+injection to drive.
+
+Two inputs, both about your money rather than about technical analysis:
+risk per trade, and total capital. Everything else is decided.
+
+The honest framing, kept visible in the UI rather than buried: the position
+arithmetic is a CALCULATOR fed by your own risk number. It is not a claim
+that any of these trades will work — historically ~38% of these breakouts
+reached +3% before −2.5%, so the list is a starting point, not an edge.
+"""
+
+import json
+import os
+import sys
+from datetime import date, datetime
+
+import pandas as pd
+import streamlit as st
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+st.set_page_config(page_title="Today", page_icon="📈", layout="wide")
+
+try:
+    import advice
+    import scan_engine as SE
+    import ui_theme as T
+    from build_snapshot import TABLE, connect, db_path
+except Exception as e:                                  # pragma: no cover
+    st.error(f"Could not import a required module: {e}")
+    st.stop()
+
+T.apply()
+
+DB = db_path()
+if not os.path.isfile(DB):
+    st.title("📈 Today")
+    st.warning("**No snapshot yet.** Build one — it takes about a minute and "
+               "needs doing once a day, after the close.")
+    st.code('sudo -u breakout /opt/breakoutscanner/.venv/bin/python \\\n'
+            '  /opt/breakoutscanner/build_snapshot.py '
+            '--universe "NIFTY Smallcap 250"', language="bash")
+    st.stop()
+
+
+# NOT cached: a long-lived read connection blocks build_snapshot from ever
+# getting a write lock, so an open browser tab would stop the nightly build.
+# Opening read-only costs a millisecond; holding one costs you the pipeline.
+def _conn():
+    return connect(DB, read_only=True)
+
+
+conn = _conn()
+try:
+    dates = [r[0] for r in conn.execute(
+        f"SELECT DISTINCT date FROM {TABLE} ORDER BY date DESC LIMIT 10"
+    ).fetchall()]
+except Exception as e:
+    st.error(f"Snapshot unreadable ({e}). Rebuild it.")
+    st.stop()
+if not dates:
+    st.warning("Snapshot is empty.")
+    st.stop()
+as_of = dates[0]
+
+# ── the two things only you can answer ─────────────────────────────────────
+with st.sidebar:
+    st.markdown("### Your numbers")
+    risk = st.number_input("Risk per trade (₹)", 500.0, 1_000_000.0,
+                           5_000.0, 500.0,
+                           help="What you are willing to LOSE if the stop is "
+                                "hit. Not the position size.")
+    capital = st.number_input("Total capital (₹)", 0.0, 100_000_000.0,
+                              500_000.0, 10_000.0,
+                              help="Used only to warn when one position would "
+                                   "be an outsized share of the account.")
+    st.caption(f"Snapshot {as_of}")
+    st.divider()
+    st.caption("The other pages are diagnostics. On a normal day you do not "
+               "need them.")
+
+st.title("📈 Today")
+
+
+# ── is this data actually current? ─────────────────────────────────────────
+# A stale snapshot answers every query cheerfully and looks identical to a
+# fresh one: same layout, same confident numbers, yesterday's market. The
+# whole point of this page is to be trusted at a glance, so the one thing it
+# must never do is present old data as today's.
+def _trading_days_since(iso: str) -> int:
+    """Weekday gap. Ignores NSE holidays, so a long weekend or a festival can
+    read as one day older than it is — deliberately conservative in the
+    direction of over-warning rather than under."""
+    try:
+        d0 = datetime.strptime(str(iso)[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return 99
+    n, cur = 0, d0
+    while cur < date.today():
+        cur = cur.fromordinal(cur.toordinal() + 1)
+        if cur.weekday() < 5:
+            n += 1
+    return n
+
+
+_age = _trading_days_since(as_of)
+_status = None
+try:
+    with open(os.path.join(os.path.dirname(DB), "last_build.json")) as _fh:
+        _status = json.load(_fh)
+except Exception:
+    pass
+
+if _age >= 2:
+    st.error(
+        f"**This data is {_age} trading days old** (snapshot {as_of}). "
+        "Everything below describes that day's market, not today's. "
+        "Breakouts listed here may already have run or failed."
+    )
+    if _status and _status.get("status") != "ok":
+        st.caption(f"Last build attempt {_status.get('finished', '?')[:16]} — "
+                   f"**{_status.get('status')}**: {_status.get('message')}")
+    else:
+        st.caption("No record of a failed build, so the nightly job may not be "
+                   "running at all. Check: `systemctl status cron` and "
+                   "`/opt/breakoutscanner/logs/`.")
+elif _age == 1:
+    st.warning(f"Snapshot is from {as_of} — the previous trading day. "
+               "Fine before today's close; stale after it.")
+
+# Coverage matters as much as freshness: a snapshot built over a fraction of
+# the universe still answers every query, and simply omits what it never
+# fetched. That is indistinguishable from "nothing qualified today".
+if _status and _status.get("status") == "degraded":
+    st.warning(
+        f"**Partial build** — only {_status.get('coverage_pct')}% of the "
+        f"universe was scanned ({_status.get('rows')} stocks). Names missing "
+        "from this list may simply never have been looked at. "
+        "See `data_cache/skipped.txt`."
+    )
+
+DAILY = "★ Daily Screen — breakout in a strong stock"
+WATCH = "★ Watchlist — strong, not yet broken out"
+
+try:
+    cands = SE.run_scan(conn, SE.PREDEFINED[DAILY], table=TABLE,
+                        on_date=as_of, order_by="rs_rating", limit=25)
+    watch = SE.run_scan(conn, SE.PREDEFINED[WATCH], table=TABLE,
+                        on_date=as_of, order_by="rs_rating", limit=25)
+    total = conn.execute(f"SELECT count(*) FROM {TABLE} WHERE date=?",
+                         [as_of]).fetchone()[0]
+    n_bo = conn.execute(
+        f"SELECT count(*) FROM {TABLE} WHERE date=? AND is_breakout "
+        f"AND lower(breakout_direction) LIKE 'bull%'", [as_of]).fetchone()[0]
+except Exception as e:
+    st.error(f"Scan failed: {e}")
+    st.stop()
+
+st.caption(f"{total} stocks scanned · {n_bo} broke out today · "
+           f"**{len(cands)} passed everything** · {as_of}")
+
+if not cands:
+    st.info("**Nothing qualifies today.** That is a normal outcome and a "
+            "useful one — a day with no setup is a day to do nothing. "
+            "The watchlist below is what to be ready for.")
+
+# ── candidates ─────────────────────────────────────────────────────────────
+BADGE = {"Candidate": T.UP, "Wait": T.WARM, "Watch": T.ACCENT, "Skip": T.MUTED}
+
+for row in cands:
+    label, why = advice.verdict(row)
+    col = BADGE.get(label, T.MUTED)
+    p = advice.plan(row, risk_rupees=risk, capital=capital)
+
+    st.markdown(
+        f'<div class="card"><div class="card-top">'
+        f'<span class="card-sym">{row.get("symbol")}</span>'
+        f'{T.badge(label, col)}'
+        f'<span class="card-sec">₹{T.num(row.get("close"), 2)}'
+        f' · {row.get("sector") or "sector unknown"}</span>'
+        f'<span class="card-sec">{why}</span>'
+        f'</div></div>', unsafe_allow_html=True)
+
+    a, b = st.columns([1.15, 1])
+    with a:
+        st.markdown("**Why it is here**")
+        for line in advice.explain(row):
+            st.markdown(f"- {line}")
+        c = advice.cautions(row)
+        if c:
+            st.markdown("**Worth knowing**")
+            for line in c:
+                st.markdown(f"- {line}")
+
+    with b:
+        st.markdown("**If you take it**")
+        if p["shares"] > 0:
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Buy", f"{p['shares']:,}", help="shares")
+            m2.metric("Stop", f"₹{p['stop']:,.1f}",
+                      f"-{p['stop_pct']:.1f}%", delta_color="off")
+            m3.metric("Cost", f"₹{p['notional']:,.0f}",
+                      (f"{p['pct_of_capital']:.0f}% of capital"
+                       if p["pct_of_capital"] == p["pct_of_capital"] else None),
+                      delta_color="off")
+            tg = " · ".join(f"{k} ₹{v:,.0f}" for k, v in p["targets"].items())
+            st.caption(f"Risking ₹{p['risk_per_share']:,.1f}/share "
+                       f"= ₹{p['shares'] * p['risk_per_share']:,.0f} total. "
+                       f"Targets: {tg}")
+        for w in p["warnings"]:
+            st.warning(w)
+    st.divider()
+
+# ── the part the app cannot do ─────────────────────────────────────────────
+if cands:
+    with st.expander("Before you act — the part no screener can do",
+                     expanded=len(cands) > 1):
+        for s in advice.next_steps(cands[0]):
+            st.markdown(f"- {s}")
+        st.caption(
+            "Every name above passed identical numeric tests, so the numbers "
+            "cannot rank them further. Historically about 38% of these "
+            "breakouts reached +3% before −2.5% — this list is where the work "
+            "starts, not where it finishes.")
+
+# ── watchlist ──────────────────────────────────────────────────────────────
+if watch:
+    st.subheader(f"Watchlist — {len(watch)} strong, no trigger yet")
+    st.caption("Nothing to do today. These are the names to recognise when "
+               "they do break out.")
+    df = pd.DataFrame(watch)
+    cols = [c for c in (
+        "symbol",
+        "rs_rating",
+        "sector",
+        "close",
+        "ret_1m_rank",
+        "pct_from_52w_high",
+        "adr_pct_5d",
+        "turnover_30d_cr",
+    ) if c in df.columns]
+    st.dataframe(df[cols].round(2), hide_index=True, use_container_width=True)
+
+st.caption("Research tool. Not financial advice, and not a recommendation to "
+           "buy or sell anything. The position sizing is arithmetic from the "
+           "risk figure you entered.")

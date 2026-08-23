@@ -1,0 +1,288 @@
+"""
+Sector Performance — a Streamlit page.
+
+Goes in /opt/breakoutscanner/pages/1_Sector_Performance.py
+
+Streamlit auto-discovers a `pages/` folder next to the main script and adds
+sidebar navigation. app.py is not modified at all — delete this folder and
+everything is exactly as it was.
+
+Shows advancing sectors only. The scanner looks for long setups, so a ranked
+list whose bottom half is negative is half noise; those rows are hidden by
+default and counted in a caption so the omission is visible rather than
+silent. The toggle brings them back.
+
+Two bases, and the difference matters:
+
+  NSE INDICES      the published sectoral indices. Large-cap by construction —
+                   Nifty Auto is about 15 names, all big.
+  SCANNED UNIVERSE the same sectors, computed from the constituents of the
+                   index segment you actually scanned. Scan Smallcap 250 and
+                   "Nifty Auto" means the smallcap auto names.
+
+Ranking sectors off the large-cap indices to judge a smallcap breakout is
+asking a different question than the one you have. The default follows the
+universe.
+"""
+
+import os
+import sys
+
+import pandas as pd
+import streamlit as st
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+st.set_page_config(page_title="Sector Performance", page_icon="📊", layout="wide")
+
+try:
+    import sectors
+    import ui_theme as T
+    from data_loader import load_daily
+except Exception as e:                                  # pragma: no cover
+    st.error(f"Could not import a required module: {e}")
+    st.stop()
+
+T.apply()
+
+st.title("📊 Sector Performance")
+st.caption("Advancing sectors, ranked. Declining sectors are hidden — this "
+           "page feeds a long-only scan.")
+
+# ── controls ───────────────────────────────────────────────────────────────
+c1, c2, c3 = st.columns([1, 1.6, 1.2])
+with c1:
+    window = st.selectbox("Timeframe", sectors.WINDOW_ORDER, index=2)   # 1M
+with c2:
+    strength = st.radio(
+        "Show", ["Advancing", "Beating Nifty"], horizontal=True,
+        help="Advancing = positive over the window. Beating Nifty is the "
+             "stricter test and the one that actually indicates rotation — "
+             "in a rising market almost everything is advancing.")
+with c3:
+    try:
+        import universes
+        uni_choices = ["NSE indices (large-cap)"] + list(universes.INDEX_REGISTRY)
+    except Exception:
+        uni_choices = ["NSE indices (large-cap)"]
+    basis = st.selectbox(
+        "Basis", uni_choices,
+        index=min(3, len(uni_choices) - 1) if len(uni_choices) > 1 else 0,
+        help="Compute sector returns from the published indices, or from the "
+             "constituents of one index segment.")
+
+b1, b2 = st.columns([1, 3])
+with b1:
+    show_all = st.checkbox("Include declining", value=False)
+with b2:
+    if st.button("🔄 Refresh sector data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def _index_perf(include_baskets: bool) -> pd.DataFrame:
+    return sectors.sector_performance(
+        loader=(lambda s: load_daily(s, use_cache=True)) if include_baskets else None,
+        include_baskets=include_baskets)
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def _universe_perf(segment: str) -> pd.DataFrame:
+    import universes
+    syms = universes.load_index_symbols(segment)
+    if not syms:
+        return pd.DataFrame()
+    return sectors.sector_performance_for_universe(
+        syms, loader=lambda s: load_daily(s, use_cache=True))
+
+
+with st.spinner("Loading sector data…"):
+    if basis == "NSE indices (large-cap)":
+        perf = _index_perf(False)
+        basis_note = "Published NSE sectoral indices, free-float cap-weighted."
+    else:
+        perf = _universe_perf(basis)
+        basis_note = (f"Equal-weighted mean of each sector's members within "
+                      f"**{basis}**. Levels will not match a published index — "
+                      f"the ranking is the point.")
+        if perf is None or perf.empty:
+            st.warning(f"No cached bars for {basis}. Run `universes.py` to "
+                       "fetch the constituent list, then scan it once so the "
+                       "daily bars are cached. Falling back to NSE indices.")
+            perf = _index_perf(False)
+            basis_note = "Published NSE sectoral indices (fallback)."
+
+if perf is None or perf.empty:
+    st.error("No sector data. Yahoo may be rate-limiting this IP — the scanner "
+             "hits the same source. Try again shortly.")
+    st.stop()
+
+st.caption(basis_note)
+
+bench = perf.attrs.get("benchmark", {})
+bench_name = perf.attrs.get("benchmark_name", "Nifty 50")
+bv = bench.get(window)
+has_bench = bv is not None and bv == bv
+
+rel_col = f"{window} vs Nifty"
+
+# ── bullish filter ─────────────────────────────────────────────────────────
+ranked = perf.sort_values(window, ascending=False).reset_index(drop=True)
+n_total = int(ranked[window].notna().sum())
+
+if strength == "Beating Nifty" and rel_col in ranked.columns:
+    bull = ranked[ranked[rel_col].fillna(-1e9) > 0]
+    test_txt = f"beating {bench_name}"
+else:
+    bull = ranked[ranked[window].fillna(-1e9) > 0]
+    test_txt = "positive"
+
+n_bull = len(bull)
+view = ranked if show_all else bull
+
+m1, m2 = st.columns(2)
+with m1:
+    if has_bench:
+        st.metric(f"{bench_name} — {window}", f"{bv:+.2f}%")
+with m2:
+    st.metric(f"Advancing sectors — {window}", f"{n_bull} of {n_total}",
+              help=f"Sectors {test_txt} over {window}.")
+
+if n_bull == 0:
+    st.warning(f"**No sector is {test_txt} over {window}.** Nothing is hidden "
+               "below because there is nothing to show. A top-down screen that "
+               "finds no leading sector is a signal in itself.")
+elif not show_all and n_total > n_bull:
+    st.caption(f"{n_total - n_bull} declining sector"
+               f"{'s' if n_total - n_bull != 1 else ''} hidden. "
+               "Tick *Include declining* to see them.")
+
+if view.empty:
+    st.stop()
+
+# ── chart ──────────────────────────────────────────────────────────────────
+try:
+    import plotly.graph_objects as go
+    d = view.dropna(subset=[window])
+    # A single hue with intensity carrying magnitude reads faster than a
+    # red/green split once the negatives are gone — there is no sign to encode.
+    vmax = max(abs(d[window].max()), 0.01)
+    colors = [T.UP if v >= 0 else T.DOWN for v in d[window]]
+    opac = [max(0.42, min(1.0, abs(v) / vmax)) for v in d[window]]
+    fig = go.Figure(go.Bar(
+        x=d["sector"], y=d[window],
+        marker=dict(color=colors, opacity=opac),
+        text=[f"{v:+.2f}%" for v in d[window]], textposition="outside",
+        hovertemplate="<b>%{x}</b><br>%{y:+.2f}%<extra></extra>"))
+    if has_bench:
+        fig.add_hline(y=bv, line_dash="dot", line_color="#94a3b8",
+                      annotation_text=f"{bench_name} {bv:+.2f}%",
+                      annotation_position="top left")
+    fig.update_layout(
+        height=430, margin=dict(l=8, r=8, t=28, b=130),
+        yaxis_title=f"{window} change %", xaxis_tickangle=-42,
+        showlegend=False, bargap=0.32,
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=12))
+    fig.update_yaxes(gridcolor="rgba(148,163,184,.22)", zeroline=True,
+                     zerolinecolor="rgba(148,163,184,.5)")
+    fig.update_xaxes(showgrid=False)
+    st.plotly_chart(fig, use_container_width=True)
+except Exception as e:
+    st.warning(f"Chart unavailable ({e}); table below.")
+
+# ── table ──────────────────────────────────────────────────────────────────
+show_cols = ["sector"] + sectors.WINDOW_ORDER + ["method", "source"]
+if rel_col in view.columns:
+    show_cols.insert(1, rel_col)
+st.dataframe(view[[c for c in show_cols if c in view.columns]].round(2),
+             hide_index=True, use_container_width=True)
+
+lead = sectors.leading_sectors(perf, window=window, top_n=5, positive_only=True)
+if lead:
+    st.markdown('<div class="legend"><span class="legend-i"><b>Leading '
+                f'({window})</b></span>'
+                + "".join(f'<span class="legend-i">{s}</span>' for s in lead)
+                + "</div>", unsafe_allow_html=True)
+
+# ── join to the last scan ──────────────────────────────────────────────────
+st.divider()
+st.subheader("Your last scan, by sector")
+
+try:
+    from results_store import load_scan_results
+    _res = load_scan_results()
+    scan = _res[0] if isinstance(_res, tuple) else _res
+except Exception as e:
+    scan = None
+    st.info(f"No cached scan results to join ({e}).")
+
+if scan is None or scan.empty:
+    st.info("Run a scan first — results are read from data_cache/scan_results.csv.")
+    st.stop()
+
+# long-only page: drop breakdowns before counting anything
+if "direction" in scan.columns:
+    scan = scan[scan["direction"].astype(str).str.lower().str.startswith("bull")]
+if scan.empty:
+    st.info("The last scan contained no bullish breakouts.")
+    st.stop()
+
+tagged = sectors.tag_scan_with_sector(scan)
+key = "sector" if ("sector" in tagged.columns
+                   and tagged["sector"].astype(bool).any()) else "industry"
+
+if key not in tagged.columns or not tagged[key].astype(bool).any():
+    st.info("No sector tags. Run universes.py to cache the constituent lists.")
+    st.stop()
+
+adv = set(bull["sector"].astype(str)) if not bull.empty else set()
+adv_norm = {s.replace(" (basket)", "").strip().lower() for s in adv}
+
+tagged = tagged[tagged[key] != ""]
+in_lead = tagged[tagged[key].astype(str).str.replace(" (basket)", "", regex=False)
+                 .str.strip().str.lower().isin(adv_norm)]
+
+counts = (tagged.groupby(key).size().sort_values(ascending=False)
+          .rename("breakouts").reset_index())
+counts["advancing"] = counts[key].astype(str).str.replace(" (basket)", "", regex=False) \
+                                 .str.strip().str.lower().isin(adv_norm)
+
+st.markdown(f"**{len(in_lead)} of {len(tagged)}** bullish breakouts sit in an "
+            f"advancing sector over {window}.")
+
+cc1, cc2 = st.columns([1, 2])
+with cc1:
+    st.dataframe(counts.rename(columns={key: "sector"}), hide_index=True,
+                 use_container_width=True)
+with cc2:
+    only_adv = st.checkbox("Advancing sectors only", value=True)
+    sub = in_lead if only_adv else tagged
+    pref = [c for c in [
+        "symbol",
+        "rs_rating",
+        key,
+        "timeframe",
+        "close",
+        "breakout_pct",
+        "volume_ratio",
+        "ret_1m",
+        "ret_1m_rank",
+        "rs_vs_nifty",
+        "pct_of_52w_high",
+        "avg_vol_10d",
+    ]
+            if c in sub.columns]
+    if sub.empty:
+        st.info("No breakouts in an advancing sector. Untick to see the rest.")
+    else:
+        st.dataframe(sub[pref].round(2), hide_index=True,
+                     use_container_width=True)
+
+st.caption("Sector comes from the NSE sectoral-index constituent lists cached "
+           "by universes.py. Symbols outside those lists show blank — run "
+           "`universes.py` to refresh. For the full six-step narrowing, see "
+           "the **Shortlist** page.")

@@ -1,0 +1,230 @@
+"""Scan NIFTY 500 universe for multi-timeframe breakouts."""
+
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable, Optional
+
+import pandas as pd
+
+from breakout import BreakoutDirection, BreakoutMode, detect_breakout, result_to_row
+from config import TIMEFRAMES, sort_timeframes
+from data_loader import load_bars
+
+
+def scan_symbol(
+    symbol: str,
+    timeframe: str,
+    bars: Optional[pd.DataFrame] = None,
+    *,
+    mode: BreakoutMode = "standard",
+    use_cache: bool = True,
+    vol_mult: Optional[float] = None,
+    lookback: Optional[int] = None,
+    atr_period: Optional[int] = None,
+    atr_mult: Optional[float] = None,
+    direction_filter: Optional[BreakoutDirection] = None,
+) -> Optional[dict]:
+    df = bars if bars is not None else load_bars(symbol, timeframe, use_cache=use_cache)
+    result = detect_breakout(
+        df,
+        symbol,
+        timeframe,
+        mode=mode,
+        vol_mult=vol_mult,
+        lookback=lookback,
+        atr_period=atr_period,
+        atr_mult=atr_mult,
+        direction_filter=direction_filter,
+    )
+    return result_to_row(result) if result else None
+
+
+def scan_universe(
+    symbols: list[str],
+    timeframes: list[str],
+    *,
+    mode: BreakoutMode = "standard",
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    use_cache: bool = True,
+    vol_mult: Optional[float] = None,
+    lookback: Optional[int] = None,
+    atr_period: Optional[int] = None,
+    atr_mult: Optional[float] = None,
+    direction_filter: Optional[BreakoutDirection] = None,
+    max_workers: int = 8,
+) -> pd.DataFrame:
+    """Scan symbols across one or more timeframes (1H, 1D, 1W, 1M)."""
+    symbols = [s.upper() for s in symbols]
+    timeframes = sort_timeframes(timeframes)
+    rows: list[dict] = []
+    from ml_engine import train_confidence_model, predict_confidence
+    ml_model = train_confidence_model(use_cache=True)
+    total = len(symbols) * len(timeframes)
+    done = 0
+
+    bar_cache: dict[tuple[str, str], pd.DataFrame] = {}
+
+    def _load(sym: str, tf: str) -> tuple[str, str, pd.DataFrame]:
+        return sym, tf, load_bars(sym, tf, use_cache=use_cache)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_load, sym, tf) for sym in symbols for tf in timeframes]
+        for fut in as_completed(futures):
+            sym, tf, df = fut.result()
+            bar_cache[(sym, tf)] = df
+            done += 1
+            if progress_callback:
+                progress_callback(done, total, f"{sym} ({tf})")
+
+    for sym in symbols:
+        for tf in timeframes:
+            row = scan_symbol(
+                sym,
+                tf,
+                bar_cache.get((sym, tf)),
+                mode=mode,
+                use_cache=use_cache,
+                vol_mult=vol_mult,
+                lookback=lookback,
+                atr_period=atr_period,
+                atr_mult=atr_mult,
+                direction_filter=direction_filter,
+            )
+            if row:
+                conf = predict_confidence(row, ml_model, bar_cache.get((sym, tf)))
+                row["ml_confidence"] = round(conf * 100.0, 1) if conf is not None else None
+                rows.append(row)
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+
+    # ── screen columns (added by patch_screen.py) ────────────────
+    # Columns only. No rows are dropped here — filtering happens in the UI
+    # so you can always see what a criterion would remove.
+    try:
+        import screen as _screen
+        from data_loader import load_bars as _load_bars, load_daily as _load_daily
+
+        _nifty = _load_bars("NIFTY", "1D", use_cache=use_cache)
+        _bench = _screen.nifty_return(_nifty)
+        _bench1m = _screen.nifty_return(_nifty, window=_screen.RET_1M_WINDOW)
+
+        _daily_cache = {}
+        def _daily_for(sym):
+            if sym in _daily_cache:
+                return _daily_cache[sym]
+            d = bar_cache.get((sym, "1D"))
+            if d is None or d.empty:
+                try:
+                    d = _load_daily(sym, use_cache=use_cache)
+                except Exception:
+                    d = None
+            _daily_cache[sym] = d
+            return d
+
+        _metrics = []
+        for _sym in df["symbol"]:
+            try:
+                _metrics.append(_screen.compute_metrics(
+                    _daily_for(_sym), _bench, index_bars=_nifty,
+                    bench_return_1m=_bench1m))
+            except Exception:
+                _metrics.append({})
+        _mdf = pd.DataFrame(_metrics, index=df.index)
+        for _c in _mdf.columns:
+            df[_c] = _mdf[_c]
+        # sector membership from NSE sectoral-index constituent lists
+        try:
+            import sectors as _sec
+            _sm = _sec.sector_map()
+            if _sm:
+                _all = _sec.sector_map_all()
+                df["sector"] = df["symbol"].map(
+                    lambda _s: _sm.get(str(_s).upper(), ""))
+                df["sectors_all"] = df["symbol"].map(
+                    lambda _s: ", ".join(_all.get(str(_s).upper(), [])))
+        except Exception:
+            pass
+
+        df = _screen.add_ret_1m_rank(df)  # "top monthly gainers"
+        df = _screen.add_rs_rank(df)      # percentile of rs_vs_nifty
+        df = _screen.add_rs_rating(df)    # O'Neil 1-99 from oneil_score
+        # Minervini Trend Template — after rs_rating, criterion 8 needs it
+        df = _screen.add_trend_template(df, _daily_for)
+
+        # All-time high: needs deeper history than load_daily fetches, so it
+        # is fetched per RESULT row (a handful), never for the whole universe.
+        # Capped so a very wide scan cannot turn into hundreds of downloads.
+        if len(df) <= 60:
+            import yfinance as _yf
+            from data_loader import yahoo_ticker as _yt
+            _deep = {}
+            def _deep_for(sym):
+                if sym in _deep:
+                    return _deep[sym]
+                d = None
+                try:
+                    raw = _yf.download(_yt(sym), period="max", interval="1d",
+                                       progress=False, auto_adjust=True, threads=False)
+                    if raw is not None and not raw.empty:
+                        if hasattr(raw.columns, "get_level_values"):
+                            try:
+                                raw.columns = raw.columns.get_level_values(0)
+                            except Exception:
+                                pass
+                        raw.columns = [str(c).lower() for c in raw.columns]
+                        d = raw
+                except Exception:
+                    d = None
+                _deep[sym] = d
+                return d
+            df = _screen.add_ath(df, _deep_for)
+        df.attrs["nifty_3m_return_pct"] = (
+            round(_bench * 100.0, 2) if _bench == _bench else None)
+    except Exception as _se:
+        # screen columns are additive — never let them break a scan
+        try:
+            import logging
+            logging.getLogger(__name__).warning("screen columns skipped: %s", _se)
+        except Exception:
+            pass
+    # ───────────────────────────────────────────────────────────────────
+
+
+
+
+
+    dir_order = {"bullish": 0, "bearish": 1}
+    tf_order = {"1H": 0, "1D": 1, "1W": 2, "1M": 3}
+    df["_dir"] = df["direction"].map(dir_order).fillna(9)
+    df["_tf"] = df["timeframe"].map(tf_order).fillna(9)
+    df = df.sort_values(
+        ["_tf", "_dir", "volume_ratio", "breakout_pct"],
+        ascending=[True, True, False, False],
+    )
+    return df.drop(columns=["_dir", "_tf"]).reset_index(drop=True)
+
+
+def filter_results(
+    df: pd.DataFrame,
+    *,
+    timeframes: Optional[list[str]] = None,
+    directions: Optional[list[str]] = None,
+    min_vol_ratio: float = 0.0,
+    only_52w: bool = False,
+) -> pd.DataFrame:
+    if df.empty:
+        return df
+    out = df.copy()
+    if timeframes:
+        out = out[out["timeframe"].isin([t.upper() for t in timeframes])]
+    if directions:
+        out = out[out["direction"].isin([d.lower() for d in directions])]
+    if min_vol_ratio > 0 and "volume_ratio" in out.columns:
+        out = out[out["volume_ratio"].fillna(0) >= min_vol_ratio]
+    if only_52w and "is_52w_high" in out.columns:
+        out = out[out["is_52w_high"]]
+    return out.reset_index(drop=True)

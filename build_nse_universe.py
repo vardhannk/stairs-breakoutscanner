@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+"""
+build_nse_universe.py — write the full list of NSE-listed equities.
+
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+         /opt/breakoutscanner/build_nse_universe.py --check
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \
+         /opt/breakoutscanner/build_nse_universe.py --apply
+
+Produces /opt/breakoutscanner/nse_all_equity.txt — one symbol per line — for
+
+    build_snapshot.py --symbols-file /opt/breakoutscanner/nse_all_equity.txt
+
+WHY A FILE RATHER THAN A NEW INDEX
+----------------------------------
+universes.py resolves a name through INDEX_SLUGS to an NSE archive URL and
+caches it as DATA_DIR/<slug>_symbols.csv. load_index_symbols() returns [] for
+any name not in INDEX_SLUGS, so "every listed stock" cannot be expressed
+there — there is no NSE archive file for it, because NSE only publishes
+*index* constituents. Every name in that registry is a benchmark, and a
+benchmark is a selection: the largest, Nifty Total Market, holds ~750 of
+roughly 2,000 listed equities.
+
+That is the entire reason KSHINTL was never scanned. Not a filter, not a
+threshold — the scanner iterates a list, and it was not on any list. Its
+price data was available the whole time: load_bars('KSHINTL') returns 159
+daily bars.
+
+SOURCE
+------
+Zerodha's public instrument dump, https://api.kite.trade/instruments — no
+auth, refreshed daily, the same list Kite trades from. Filtered to NSE
+cash-segment equities.
+
+(An earlier version of this script tried to auto-detect the constituent file
+format and failed to find any file at all: cache files are named by SLUG, not
+by index name, and DATA_DIR is a pathlib.Path while the search tested for
+str. Both were my errors. Reading universes.py removed the need to guess.)
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import io
+import os
+import sys
+import urllib.request
+
+G, R, Y, C, B, X = ("\033[32m", "\033[31m", "\033[33m",
+                    "\033[36m", "\033[1m", "\033[0m")
+
+INSTRUMENTS_URL = "https://api.kite.trade/instruments"
+
+# Write beside THIS FILE, never to a named app.
+#
+# This read DEFAULT_OUT = "/opt/breakoutscanner/nse_all_equity.txt". Both apps
+# carry a copy of this script, so /opt/breakoutscanner-lab's nightly build
+# classified 3,466 equities correctly and then wrote them into the ORIGINAL
+# app's universe file. The lab's own list stayed frozen at 3,303 from the day
+# it was cloned, and the lab — the app built specifically so that no stock is
+# missed — was scanning 165 fewer symbols than the app it was meant to
+# improve on. It also meant a lab run mutated the original's state, which is
+# the one thing the lab exists to prevent.
+#
+# Fourth instance of this exact bug: prefetch.py's --app default, the venv
+# path, APP in nightly_build.sh, and now this. A constant naming one app
+# cannot survive the file being copied to another.
+DEFAULT_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "nse_all_equity.txt")
+
+# The name this file is registered under in universes.INDEX_SLUGS. It must be
+# excluded when consulting the index registry, or the script reads its own
+# previous output as ground truth and can never remove anything.
+SELF_NAME = "NSE All Equity"
+
+# NSE SERIES, which is the suffix after the hyphen in a Kite tradingsymbol.
+#
+# The first version of this filter took everything with segment=NSE and
+# instrument_type=EQ and returned 8,810 symbols. NSE lists roughly 2,000
+# equities. The excess was the DEBT segment — 0ABCL31-N0, 1003IIFL29-NC,
+# 0IRFC35-N0 — bonds and NCDs that Kite also tags EQ.
+#
+# That would not merely have been slow. RS Rating is a PERCENTILE ACROSS THE
+# UNIVERSE. Six thousand bonds that barely move would push every real stock
+# into the high 90s, so `rs_rating >= 80` would have silently stopped
+# discriminating while still producing believable output.
+#
+# Series EQ carries no suffix at all, which is the clean signal. BE and BZ are
+# genuine equity in trade-for-trade settlement; SM and ST are the SME platform.
+# Everything else in this dump under an EQ instrument_type is debt.
+EQUITY_SERIES = {"", "BE", "BZ"}          # ordinary + trade-for-trade
+SME_SERIES = {"SM", "ST"}                 # NSE Emerge; INCLUDED by default
+
+# A count far outside this band means the filter is wrong again, not that the
+# market changed. Refuse rather than write a universe that poisons the ranks.
+# Widened from 3,500 because SME adds ~560: main board ~3,060 + SME ~560.
+SANE_MIN, SANE_MAX = 1200, 5000
+
+
+def hdr(s): print(f"\n{C}{'=' * 66}\n== {s}\n{'=' * 66}{X}")
+def ok(s):  print(f"  {G}ok  {X} {s}")
+def bad(s): print(f"  {R}FAIL{X} {s}")
+
+
+def series_of(tradingsymbol: str) -> str:
+    """NSE series = the bit after the last hyphen, but ONLY when it is a
+    plausible series code.
+
+    Every NSE series code is exactly two characters: EQ, BE, BZ, SM, ST, N0,
+    NC, GS, TB, SG. A hyphen in a tradingsymbol is not automatically a series
+    separator — it is often part of the company name:
+
+        BAJAJ-AUTO   -> "AUTO"  is not a series, this is Bajaj Auto
+        NAM-INDIA    -> "INDIA" is not a series, this is Nippon India AMC
+
+    Taking anything after a hyphen as a series silently deleted both from the
+    universe. They came back only because they sit in a NIFTY index and the
+    union rescued them; an equivalent stock outside every index would still
+    be gone, with nothing to show for it.
+    """
+    if "-" not in tradingsymbol:
+        return ""
+    tail = tradingsymbol.rsplit("-", 1)[1].upper()
+    return tail if len(tail) == 2 else ""
+
+
+def fetch(include_sme: bool = False) -> tuple[list[str], int, dict]:
+    req = urllib.request.Request(
+        INSTRUMENTS_URL, headers={"User-Agent": "breakoutscanner/1.0"})
+    with urllib.request.urlopen(req, timeout=180) as r:
+        data = r.read().decode("utf-8", errors="replace")
+    rdr = csv.DictReader(io.StringIO(data))
+
+    keep = set(EQUITY_SERIES) | (SME_SERIES if include_sme else set())
+    syms: set[str] = set()
+    by_series: dict[str, int] = {}
+    total = 0
+    for row in rdr:
+        total += 1
+        if not (row.get("exchange") == "NSE" and row.get("segment") == "NSE"
+                and (row.get("instrument_type") or "").upper() == "EQ"):
+            continue
+        s = (row.get("tradingsymbol") or "").strip().upper()
+        if not s:
+            continue
+        ser = series_of(s)
+        by_series[ser or "EQ (no suffix)"] = by_series.get(ser or "EQ (no suffix)", 0) + 1
+        if ser not in keep:
+            continue
+        # ETF indicative-NAV feeds are listed in series EQ but are not
+        # instruments you can buy — they publish an ETF's fair value tick by
+        # tick. They have no meaningful OHLC history, so every one of them
+        # failed the build as "no bars returned" and ate into the coverage
+        # figure as though a real company were missing:
+        #
+        #     BNK10BINAV, EBANKINAV, GLD360INAV, GOLDSHINAV, EQU200INAV
+        #
+        # All 19 non-SME failures in the first full build were these. They
+        # also sit in the RS percentile pool, comparing real stocks against
+        # something that does not trend.
+        if s.endswith("INAV"):
+            continue
+        # NO DIGIT-PREFIX EXCLUSION.
+        #
+        # An earlier version dropped any symbol starting with a digit, on the
+        # reasoning that debt issues are named 0IRFC35 and 1003IIFL29 and no
+        # equity is. That last part is simply false:
+        #
+        #     360ONE, 3MINDIA, 3IINFOLTD, 3PLAND, 5PAISA,
+        #     20MICRONS, 63MOONS
+        #
+        # are all ordinary listed companies, 3MINDIA and 360ONE large enough
+        # to sit in NIFTY indices. The rule deleted them for looking like
+        # bonds. It was also redundant: every debt name it caught carries a
+        # debt SERIES (N0, NC, ...) and is already excluded above, so this
+        # guard removed only false positives.
+        # STRIP THE SERIES SUFFIX.
+        #
+        # The data loader resolves symbols against Yahoo as "<SYMBOL>.NS", and
+        # Yahoo does not carry NSE series suffixes. A first run showed 23 of
+        # 300 "possibly delisted" — every one of them a -BE or -BZ name:
+        #
+        #     $AAREYDRUGS-BE.NS: possibly delisted; no timezone found
+        #
+        # AAREYDRUGS is listed and trading. The correct Yahoo symbol is
+        # AAREYDRUGS.NS. Left alone this silently drops all 278 BE and BZ
+        # stocks — a real company is in EQ or in BE, never both, so stripping
+        # cannot collide with an existing symbol.
+        if ser:
+            s = s.rsplit("-", 1)[0]
+        syms.add(s)
+    return sorted(syms), total, by_series
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--check", action="store_const", const="check", dest="mode")
+    ap.add_argument("--apply", action="store_const", const="apply", dest="mode")
+    ap.add_argument("--out", default=DEFAULT_OUT)
+    ap.add_argument("--no-sme", action="store_true",
+                    help="exclude the NSE Emerge SME platform (series SM/ST). "
+                         "Included by default: they are listed companies and "
+                         "the objective is to miss nothing.")
+    ap.add_argument("--no-index-union", action="store_true",
+                    help="do not add index constituents missing from the dump")
+    a = ap.parse_args()
+    mode = a.mode or "check"
+
+    hdr("1. fetching every NSE instrument")
+    try:
+        syms, total, by_series = fetch(include_sme=not a.no_sme)
+    except Exception as e:
+        bad(f"{type(e).__name__}: {e}")
+        print("  The server needs outbound HTTPS to api.kite.trade.")
+        return 2
+    ok(f"{total:,} instruments in the dump")
+
+    print("\n  everything Kite tags segment=NSE instrument_type=EQ,")
+    print("  broken down by SERIES (the suffix after the hyphen):\n")
+    keep = set(EQUITY_SERIES) | (set() if a.no_sme else SME_SERIES)
+    for ser, n in sorted(by_series.items(), key=lambda kv: -kv[1])[:14]:
+        raw = "" if ser.startswith("EQ ") else ser
+        mark = f"{G}KEPT{X}" if raw in keep else f"{Y}dropped (debt/other){X}"
+        print(f"    {ser:<20} {n:>6}   {mark}")
+    dropped = total and sum(n for s, n in by_series.items()
+                            if ("" if s.startswith("EQ ") else s) not in keep)
+    print(f"\n  {B}{len(syms):,} equities kept, {dropped:,} dropped{X}")
+
+    if not (SANE_MIN <= len(syms) <= SANE_MAX):
+        bad(f"{len(syms):,} is outside the expected {SANE_MIN:,}-{SANE_MAX:,}")
+        print(f"""
+  {R}Refusing to write.{X} NSE lists roughly 2,000 equities. A count far from
+  that means this filter is wrong, and a wrong universe does not fail
+  loudly — it {B}silently breaks RS Rating{X}, which is a percentile across
+  whatever is in the universe. Padding it with non-equities pushes every
+  real stock into the high 90s and `rs_rating >= 80` stops filtering.
+
+  Series breakdown above shows what was seen. Send it to me.""")
+        return 5
+
+    print(f"\n  KSHINTL present: {B}{'KSHINTL' in syms}{X}")
+    print(f"  sample: {', '.join(syms[:10])} ...")
+
+    # ── what this actually adds ────────────────────────────────────────────
+    hdr("2. how much is currently invisible")
+    have: set[str] = set()
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(a.out)))
+        import universes
+        # SKIP OUR OWN UNIVERSE.
+        #
+        # register_universe.py put "NSE All Equity" into INDEX_REGISTRY, so
+        # this loop was reading the PREVIOUS version of the very file it is
+        # about to write, treating it as an authority on what must not be
+        # lost. The union then restored everything the new filter had just
+        # removed — 341 ETF iNAV feeds came straight back, and the run
+        # reported "newly scannable 1" because it was comparing the output
+        # against itself.
+        #
+        # A self-correcting filter cannot use its own last output as ground
+        # truth. Ground truth here is the NSE index lists, nothing else.
+        skip_self = {SELF_NAME.upper()}
+        others = [n for n in universes.INDEX_REGISTRY
+                  if n.upper() not in skip_self]
+        for n in others:
+            try:
+                have |= {str(s).upper() for s in universes.load_index_symbols(n)}
+            except Exception:
+                pass
+        print(f"  {len(others)} index list(s) consulted "
+              f"(excluding {SELF_NAME!r} itself)")
+    except Exception as e:
+        print(f"  {Y}could not load universes ({e}) — comparison skipped{X}")
+    if have:
+        new = sorted(set(syms) - have)
+        orphans = sorted(have - set(syms))
+        print(f"  scannable today      {len(have):,}")
+        print(f"  {B}newly scannable      {len(new):,}{X}")
+        print(f"\n  a few that were invisible: {', '.join(new[:12])} ...")
+
+        # UNION, never replace.
+        #
+        # A handful of index members are absent from the instrument dump —
+        # naming differences between Kite and NSE archives, or very recent
+        # index changes. Switching the nightly build from an index name to
+        # this file would silently DROP them, which is the exact class of
+        # loss this file exists to end. So the universe is a strict superset
+        # of everything currently scanned.
+        # The same exclusions must apply to anything the union pulls in.
+        # An index cache can itself contain iNAV feeds; letting them through
+        # a side door defeats the filter just as thoroughly as the
+        # self-reference bug did.
+        rescued = [s for s in orphans if not s.endswith("INAV")]
+        blocked = [s for s in orphans if s.endswith("INAV")]
+        if blocked:
+            print(f"\n  {len(blocked)} iNAV feed(s) in index caches, not "
+                  f"restored: {', '.join(blocked[:5])}"
+                  f"{' ...' if len(blocked) > 5 else ''}")
+        if rescued and not a.no_index_union:
+            print(f"\n  {Y}{len(rescued)} symbol(s) are in your NIFTY indices "
+                  f"but NOT in the equity dump:{X}")
+            print(f"    {', '.join(rescued)}")
+            syms = sorted(set(syms) | set(rescued))
+            print(f"  {G}added them — the universe is now a strict superset "
+                  f"of the tradeable names you scan today{X}")
+        elif orphans:
+            print(f"\n  {R}{len(orphans)} index member(s) NOT included "
+                  f"(--no-index-union): {', '.join(orphans[:10])}{X}")
+
+    hdr("3. output")
+    print(f"  {a.out}")
+    if mode == "check":
+        print(f"\n{Y}--check only. Nothing written.{X}")
+        print(f"Apply with:  {sys.argv[0]} --apply")
+        return 0
+
+    try:
+        with open(a.out, "w") as fh:
+            fh.write("# NSE cash-segment equities from api.kite.trade/instruments\n")
+            fh.write("# Regenerate with build_nse_universe.py --apply\n")
+            fh.write("\n".join(syms) + "\n")
+    except OSError as e:
+        bad(f"cannot write {a.out}: {e}")
+        return 3
+    ok(f"wrote {len(syms):,} symbols ({os.path.getsize(a.out):,} bytes)")
+
+    # Read it back the way build_snapshot will, rather than trusting the write.
+    with open(a.out) as fh:
+        back = [l.strip() for l in fh if l.strip() and not l.startswith("#")]
+    if len(back) == len(syms) and "KSHINTL" in back:
+        ok("re-read cleanly; KSHINTL is in the list")
+    else:
+        bad(f"re-read gave {len(back)} symbols, KSHINTL present: "
+            f"{'KSHINTL' in back}")
+        return 4
+
+    hdr("next")
+    print(f"""  Try a slice first — 2,000 symbols on a 512 MB box is a real risk:
+
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \\
+      /opt/breakoutscanner/build_snapshot.py \\
+      --symbols-file {a.out} --limit 300
+
+  If that completes, drop --limit for the full run. Watch it the first
+  time. {Y}An OOM kill stops it mid-build, and a truncated snapshot is the
+  silent-wrong failure we have spent this session removing.{X}
+
+  Then confirm the stock that started this:
+
+    sudo -u breakout /opt/breakoutscanner/.venv/bin/python \\
+      /opt/breakoutscanner/diagnose_symbol.py KSHINTL""")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

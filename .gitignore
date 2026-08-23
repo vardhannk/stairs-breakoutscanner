@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Local caches
+data_cache/
+.cache/
+logs/
+.promote-backup-*/
+*.bak*
+*.backup-*
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Streamlit
+.streamlit/secrets.toml

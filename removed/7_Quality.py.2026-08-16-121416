@@ -1,0 +1,675 @@
+"""
+Quality — fundamentals for the names momentum already surfaced.
+
+Goes in /opt/breakoutscanner/pages/7_Quality.py
+
+WHAT THIS IS, AND WHAT IT DELIBERATELY IS NOT
+---------------------------------------------
+This page vets a shortlist. It does not screen the universe.
+
+Fundamental data for Indian equities arrives one HTTP request per company.
+At 3,046 symbols that is hours, every night, against an endpoint that owes us
+nothing. At 20 symbols it is twenty seconds, on demand, when you actually want
+it. So the shortlist comes from the snapshot — which already knows RS,
+Minervini and breakout state for every stock — and only those names are
+looked up.
+
+The cost of that choice, stated plainly: fundamentals arrive AFTER the
+shortlist, so they cannot help you find a candidate. They can only confirm or
+kill one momentum already found. If you want fundamentals to select rather
+than confirm, this is the wrong page and the answer is a nightly job with a
+data source that supports bulk access.
+
+MISSING DATA IS SHOWN, NEVER SILENTLY DROPPED
+---------------------------------------------
+Yahoo's fundamental coverage for Indian smallcaps is thin and unpredictable,
+and thin exactly where your breakouts come from. A page that quietly hid the
+stocks it could not price would show you a shorter, cleaner, wrong list — the
+same failure as the six universe filters and the RS-stored-as-zero bug.
+
+So: every shortlisted stock appears. Fields that are absent read "n/a" and are
+counted in the coverage line at the top. Nothing here filters a stock out for
+lack of data, and nothing scores a missing field as zero.
+
+QoQ AND YoY
+-----------
+Both are shown for revenue and for PAT, from the quarterly statements rather
+than from a single summary field, because a summary field cannot tell you
+whether profit grew faster than sales. It usually can't tell you what it means
+either: Yahoo's earningsQuarterlyGrowth is YoY despite the name.
+
+Every percentage is computed from the rupee figure beside it, so any of them
+can be checked by hand.
+
+STYLING
+-------
+CSS copied verbatim from app.py, same as 5_IPO.py and 6_All_NSE.py. It is
+duplicated rather than imported because app.py is a Streamlit script and
+importing it would execute the whole main scanner as a side effect.
+"""
+
+import os
+import sys
+import time
+
+import pandas as pd
+import streamlit as st
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+st.set_page_config(page_title="Quality", page_icon="🔬", layout="wide")
+
+try:
+    from build_snapshot import TABLE, connect, db_path
+except Exception as e:                                  # pragma: no cover
+    st.error(f"Could not import a required module: {e}")
+    st.stop()
+
+try:
+    import yfinance as yf
+except Exception:                                       # pragma: no cover
+    yf = None
+
+
+# ── styles, verbatim from app.py ───────────────────────────────────────────
+st.markdown(
+    """
+<style>
+.breakout-card {
+    padding: 0.9rem 1rem;
+    border-radius: 12px;
+    margin-bottom: 0.75rem;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    min-height: 130px;
+}
+.breakout-card.bullish {
+    background: linear-gradient(145deg, #0d2818 0%, #1b4332 45%, #2d6a4f 100%);
+    border-left: 5px solid #52b788;
+}
+.breakout-card.bearish {
+    background: linear-gradient(145deg, #3b0a0a 0%, #6b1515 45%, #9b2226 100%);
+    border-left: 5px solid #f4845f;
+}
+.card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.55rem;
+    flex-wrap: wrap;
+}
+.card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    justify-content: flex-end;
+}
+.card-symbol {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 0.02em;
+}
+.card-badges span {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.14);
+    color: #f8fafc;
+}
+.card-badges .rs {
+    background: rgba(167,139,250,0.30);
+    color: #ffffff;
+    outline: 1px solid rgba(167,139,250,0.55);
+}
+.card-badges .good { background: rgba(61,214,140,0.26); color: #d1fae5; }
+.card-badges .warnb { background: rgba(255,107,107,0.26); color: #fee2e2; }
+.card-badges .nab { background: rgba(255,255,255,0.08); color: #9aa4b2; }
+.card-stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+    margin-bottom: 0.45rem;
+}
+.card-stat { font-size: 0.82rem; color: #e2e8f0; }
+.card-stat b { color: #ffffff; font-weight: 700; }
+.card-foot { font-size: 0.74rem; color: #cbd5e1; opacity: 0.92; }
+.summary-metrics {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;
+}
+.summary-metric {
+    flex: 1 1 120px; min-width: 110px; padding: 0.5rem 0.65rem;
+    border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);
+}
+.summary-metric .sm-label {
+    font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; margin-bottom: 0.15rem; opacity: 0.9;
+}
+.summary-metric .sm-value { font-size: 0.95rem; font-weight: 700; line-height: 1.25; }
+.summary-metric.breakouts {
+    background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%);
+    border-left: 3px solid #a78bfa;
+}
+.summary-metric.breakouts .sm-label { color: #c4b5fd; }
+.summary-metric.breakouts .sm-value { color: #ede9fe; }
+.summary-metric.bullish {
+    background: linear-gradient(145deg, #052e16 0%, #14532d 100%);
+    border-left: 3px solid #4ade80;
+}
+.summary-metric.bullish .sm-label { color: #86efac; }
+.summary-metric.bullish .sm-value { color: #dcfce7; }
+.summary-metric.bearish {
+    background: linear-gradient(145deg, #450a0a 0%, #7f1d1d 100%);
+    border-left: 3px solid #f87171;
+}
+.summary-metric.bearish .sm-label { color: #fca5a5; }
+.summary-metric.bearish .sm-value { color: #fee2e2; }
+.summary-metric.symbols {
+    background: linear-gradient(145deg, #0c4a6e 0%, #075985 100%);
+    border-left: 3px solid #38bdf8;
+}
+.summary-metric.symbols .sm-label { color: #7dd3fc; }
+.summary-metric.symbols .sm-value { color: #e0f2fe; }
+.qtbl { border-collapse: collapse; width: 100%; font-size: 0.83rem; }
+.qtbl th, .qtbl td {
+    padding: 0.4rem 0.55rem; text-align: right; white-space: nowrap;
+    border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.qtbl th:first-child, .qtbl td:first-child { text-align: left; }
+.qtbl thead .grp th {
+    text-align: center; background: rgba(255,255,255,0.05);
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.qtbl thead .grp .rev { color: #38bdf8; }
+.qtbl thead .grp .pat { color: #3dd68c; }
+.qtbl th { color: #9aa4b2; font-size: 0.72rem; text-transform: uppercase; }
+.qtbl .divl { border-left: 2px solid rgba(255,255,255,0.18); }
+.qtbl .g { color: #3dd68c; } .qtbl .b { color: #ff6b6b; }
+.qtbl .na { color: #5c6673; font-style: italic; }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+<div style="background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #312e81 100%);
+padding: 1.1rem 1.3rem; border-radius: 12px; margin-bottom: 1rem;">
+<div style="font-size:1.4rem;font-weight:800;color:#fff;">🔬 Quality</div>
+<div style="color:#e0f2fe;margin-top:0.35rem;">
+Fundamentals for the names momentum already surfaced. This vets a shortlist —
+it does not screen the universe, and it never removes a stock for having no data.</div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+DB = db_path()
+if not os.path.exists(DB):
+    st.warning("**No snapshot yet.** Build one first.")
+    st.stop()
+
+
+def _conn():
+    # Not cached: a long-lived read connection blocks the nightly build from
+    # taking a write lock, so an open browser tab would stall the pipeline.
+    return connect(DB, read_only=True)
+
+
+conn = _conn()
+try:
+    as_of = conn.execute(f"SELECT max(date) FROM {TABLE}").fetchone()[0]
+    have = set(conn.execute(f"DESCRIBE {TABLE}").fetchdf()["column_name"])
+except Exception as e:
+    st.error(f"Snapshot unreadable ({e}).")
+    st.stop()
+
+if not as_of:
+    st.warning("Snapshot has no rows.")
+    st.stop()
+
+
+# ── which names to vet ─────────────────────────────────────────────────────
+SOURCES = {
+    "F&O stocks": "fno",
+    "Breakouts on the latest bar": "brk",
+    "Top by RS Rating": "rs",
+    "Minervini 7/8 or better": "min",
+    "Type symbols myself": "manual",
+}
+
+with st.sidebar:
+    st.markdown("### Which stocks")
+    # F&O first, deliberately. It is ~200 names, all liquid, and the only
+    # slice where Yahoo fundamental coverage is dependable — the 403 symbols
+    # with no data at all are almost entirely SME and recent listings, none
+    # of which are in F&O. Starting on "Top by RS" meant the first thing the
+    # page ever showed was 20 names chosen by a measure that has nothing to
+    # do with fundamentals.
+    src = st.selectbox("Source", list(SOURCES), index=0)
+    kind = SOURCES[src]
+
+    # ── narrowing, applied to every source except manual ────────────────
+    cap = fno_only = None
+    sector_pick = "Any"
+    if kind != "manual":
+        if "cap_band" in have:
+            bands = ["Any"] + [b for b in conn.execute(
+                f"SELECT DISTINCT cap_band FROM {TABLE} WHERE date = '{as_of}' "
+                f"AND cap_band IS NOT NULL ORDER BY 1").fetchdf()["cap_band"]]
+            cap = st.selectbox("Cap band", bands, index=0)
+        if "in_fno" in have and kind != "fno":
+            fno_only = st.checkbox("F&O names only", value=False)
+        if "sector" in have:
+            secs = ["Any"] + [s for s in conn.execute(
+                f"SELECT DISTINCT sector FROM {TABLE} WHERE date = '{as_of}' "
+                f"AND sector IS NOT NULL AND sector <> '' ORDER BY 1"
+            ).fetchdf()["sector"]]
+            if len(secs) > 1:
+                sector_pick = st.selectbox("Sector", secs, index=0)
+
+    n = st.slider("How many", 5, 250, 25,
+                  help="One network request per name, roughly a second each. "
+                       "250 is about four minutes — fine for a cap band, not "
+                       "for the whole universe.")
+    manual = ""
+    if kind == "manual":
+        manual = st.text_area("Symbols", placeholder="GRAVITA\nSHAILY\nKSHINTL",
+                              height=120)
+    st.caption(f"Snapshot as of {as_of}")
+    st.divider()
+    st.caption("Fundamentals are fetched live and cached for 6 hours. "
+               "Nothing is written to the snapshot.")
+    st.caption("There is no setting that fetches all 3,046 — that is an hour "
+               "of sequential requests. Narrow first, then fetch.")
+
+cols = [c for c in ("symbol", "rs_rating", "close", "sector",
+                    "minervini_score", "breakout_timeframes", "cap_band",
+                    "turnover_30d_cr", "ret_1m_rank", "pct_of_52w_high")
+        if c in have]
+sel = ", ".join(cols)
+where = [f"date = '{as_of}'"]
+order = "rs_rating DESC NULLS LAST" if "rs_rating" in have else "symbol"
+
+# Funds are excluded here regardless of source. A fund has no P/E, no ROE and
+# no quarterly statements; including one would only ever add an all-n/a row
+# and make the coverage tiles look worse than the data actually is.
+if "is_fund" in have:
+    where.append("(is_fund IS NULL OR is_fund = FALSE)")
+
+if kind == "fno" and "in_fno" in have:
+    where.append("in_fno = TRUE")
+elif kind == "brk":
+    brk = [c for c in ("breakout_1d", "breakout_1w", "breakout_1m")
+           if c in have]
+    if brk:
+        where.append("(" + " OR ".join(f"{c} = TRUE" for c in brk) + ")")
+elif kind == "min" and "minervini_score" in have:
+    where.append("minervini_score >= 7")
+
+if cap and cap != "Any":
+    where.append("cap_band = '" + str(cap).replace("'", "") + "'")
+if fno_only and "in_fno" in have:
+    where.append("in_fno = TRUE")
+if sector_pick and sector_pick != "Any":
+    where.append("sector = '" + str(sector_pick).replace("'", "") + "'")
+
+try:
+    if kind == "manual":
+        syms = [s.strip().upper() for s in manual.replace(",", "\n").split("\n")
+                if s.strip()]
+        if not syms:
+            st.info("Type some symbols in the sidebar to begin.")
+            st.stop()
+        inlist = ", ".join("'" + s.replace("'", "") + "'" for s in syms[:50])
+        q = (f"SELECT {sel} FROM {TABLE} WHERE date = '{as_of}' "
+             f"AND symbol IN ({inlist})")
+        short = conn.execute(q).fetchdf()
+        missing = sorted(set(syms[:50]) - set(short["symbol"]))
+        if missing:
+            st.warning("Not in the snapshot: " + ", ".join(missing))
+    else:
+        q = (f"SELECT {sel} FROM {TABLE} WHERE {' AND '.join(where)} "
+             f"ORDER BY {order} LIMIT {n}")
+        short = conn.execute(q).fetchdf()
+except Exception as e:
+    st.error(f"Query failed: {e}")
+    st.stop()
+
+if short.empty:
+    st.info("Nothing matches that shortlist today.")
+    st.stop()
+
+
+# ── fundamentals ───────────────────────────────────────────────────────────
+INFO_FIELDS = {
+    "marketCap": "mcap", "sector": "y_sector", "industry": "industry",
+    "trailingPE": "pe", "priceToBook": "pb", "returnOnEquity": "roe",
+    "profitMargins": "npm", "operatingMargins": "opm",
+    "debtToEquity": "de", "currentRatio": "cr",
+}
+
+
+def _num(x):
+    try:
+        v = float(x)
+        return v if v == v else None      # NaN check without importing math
+    except (TypeError, ValueError):
+        return None
+
+
+def _row_of(df, *names):
+    """First matching row of a yfinance statement frame, as a float series."""
+    if df is None or getattr(df, "empty", True):
+        return None
+    idx = {str(i).strip().lower(): i for i in df.index}
+    for want in names:
+        key = want.strip().lower()
+        if key in idx:
+            return pd.to_numeric(df.loc[idx[key]], errors="coerce")
+    return None
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def fetch_one(sym: str) -> dict:
+    """Everything we want for one ticker. Never raises."""
+    out = {"sym": sym, "ok": False, "quarters": None}
+    if yf is None:
+        out["err"] = "yfinance not installed"
+        return out
+    try:
+        t = yf.Ticker(f"{sym}.NS")
+        info = t.info or {}
+    except Exception as e:
+        out["err"] = str(e)[:120]
+        return out
+    for k, short_name in INFO_FIELDS.items():
+        v = info.get(k)
+        out[short_name] = v if short_name in ("y_sector", "industry") else _num(v)
+    out["ok"] = any(out.get(v) is not None for v in INFO_FIELDS.values())
+
+    # quarterly revenue and PAT, for real QoQ / YoY
+    try:
+        q = t.quarterly_income_stmt
+        rev = _row_of(q, "Total Revenue", "Operating Revenue")
+        pat = _row_of(q, "Net Income", "Net Income Common Stockholders")
+        if rev is not None and pat is not None and len(rev) >= 2:
+            frame = pd.DataFrame({"rev": rev, "pat": pat}).dropna(how="all")
+            frame = frame.sort_index()          # oldest -> newest
+            out["quarters"] = frame
+    except Exception:
+        pass
+    return out
+
+
+syms = list(short["symbol"])
+
+# ── show WHAT will be fetched, before fetching anything ────────────────────
+# Streamlit re-runs this whole script on every interaction — changing the
+# stock in the detail dropdown, moving the slider, or just navigating back to
+# the page. The first version fetched unconditionally at the top of that
+# script, so every one of those re-runs looked like a fresh scan of stocks the
+# user had never seen listed. It also meant simply opening the page spent
+# twenty seconds of network time on a shortlist nobody had agreed to yet.
+#
+# The snapshot half is free — RS, close, Minervini and sector are already in
+# DuckDB. So that is shown immediately, and the network half waits behind a
+# button.
+label = {"fno": f"{len(syms)} F&O stocks",
+         "rs": f"the {len(syms)} highest RS Ratings in the snapshot",
+         "brk": f"{len(syms)} stocks that broke out on {as_of}",
+         "min": f"{len(syms)} stocks scoring Minervini 7/8 or better",
+         "manual": f"the {len(syms)} symbols you typed"}[kind]
+narrow = [x for x in (
+    None if not cap or cap == "Any" else f"cap band {cap}",
+    "F&O only" if fno_only else None,
+    None if sector_pick == "Any" else f"sector {sector_pick}") if x]
+if narrow:
+    label += " — " + ", ".join(narrow)
+
+st.subheader("Shortlist — from the snapshot, no network")
+st.caption(f"These are {label}. Nothing has been fetched yet.")
+if len(syms) == n:
+    st.caption(f"⚠ Cut off at {n}. There may be more matching stocks — "
+               f"raise the slider or narrow further, because what you are "
+               f"seeing is the top {n} by RS, not the whole set.")
+pre = [c for c in ("symbol", "rs_rating", "close", "minervini_score",
+                   "sector", "breakout_timeframes", "cap_band")
+       if c in short.columns]
+st.dataframe(short[pre].round(2), hide_index=True, use_container_width=True)
+
+seen = st.session_state.setdefault("quality_seen", set())
+todo = [s for s in syms if s not in seen]
+sig = (as_of, kind, tuple(syms))
+armed = st.session_state.get("quality_sig") == sig
+
+if todo and not armed:
+    st.info(
+        f"**{len(todo)} of these {len(syms)} have not been fetched yet.** "
+        f"Each one is a separate network request — roughly "
+        f"{len(todo)} second{'s' if len(todo) != 1 else ''}."
+    )
+    if not st.button(f"Fetch fundamentals for {len(todo)} stock(s)",
+                     type="primary"):
+        st.caption(
+            "Results are cached for six hours, so re-running this shortlist "
+            "or clicking around the page afterwards costs nothing."
+        )
+        st.stop()
+    st.session_state["quality_sig"] = sig
+
+t0 = time.time()
+data = {}
+if todo:
+    bar = st.progress(0.0, text=f"Fetching {len(todo)} of {len(syms)}…")
+    for i, s in enumerate(syms, 1):
+        data[s] = fetch_one(s)
+        seen.add(s)
+        bar.progress(i / len(syms), text=f"{s}  ({i}/{len(syms)})")
+    bar.empty()
+else:
+    # every symbol already cached — no progress bar, no network
+    for s in syms:
+        data[s] = fetch_one(s)
+elapsed = time.time() - t0
+if not todo:
+    st.caption(f"All {len(syms)} served from cache in {elapsed:.1f}s — "
+               f"no network requests.")
+
+got = sum(1 for d in data.values() if d.get("ok"))
+qgot = sum(1 for d in data.values() if d.get("quarters") is not None)
+
+st.markdown(
+    f"""
+<div class="summary-metrics">
+  <div class="summary-metric breakouts"><div class="sm-label">Shortlist</div>
+    <div class="sm-value">{len(syms)}</div></div>
+  <div class="summary-metric bullish"><div class="sm-label">Fundamentals found</div>
+    <div class="sm-value">{got}</div></div>
+  <div class="summary-metric bearish"><div class="sm-label">No data</div>
+    <div class="sm-value">{len(syms) - got}</div></div>
+  <div class="summary-metric symbols"><div class="sm-label">Quarterly history</div>
+    <div class="sm-value">{qgot}</div></div>
+  <div class="summary-metric symbols"><div class="sm-label">Fetch time</div>
+    <div class="sm-value">{elapsed:.0f}s</div></div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+if got == 0:
+    st.error(
+        "**No fundamentals came back for any of these.** That is a data-source "
+        "result, not a bug in the shortlist — the momentum columns below are "
+        "still correct. If this persists, Yahoo has no fundamental coverage "
+        "for these listings and the answer is a different source, not a retry."
+    )
+elif got < len(syms) * 0.5:
+    st.warning(
+        f"Only {got} of {len(syms)} returned anything. Coverage this thin is "
+        f"normal for smallcaps and is exactly why nothing here filters on it."
+    )
+
+
+def _pct(cur, prev):
+    if cur is None or prev is None:
+        return None
+    try:
+        cur, prev = float(cur), float(prev)
+    except (TypeError, ValueError):
+        return None
+    if prev == 0 or prev != prev or cur != cur:
+        return None
+    return (cur / prev - 1.0) * 100.0
+
+
+def growth(d, field, lag):
+    q = d.get("quarters")
+    if q is None or field not in q or len(q) <= lag:
+        return None
+    s = q[field].dropna()
+    if len(s) <= lag:
+        return None
+    return _pct(s.iloc[-1], s.iloc[-1 - lag])
+
+
+rows = []
+for _, r in short.iterrows():
+    s = r["symbol"]
+    d = data.get(s, {})
+    rows.append({
+        "symbol": s,
+        "rs_rating": r.get("rs_rating"),
+        "close": r.get("close"),
+        "mcap_cr": (d.get("mcap") / 1e7) if d.get("mcap") else None,
+        "pe": d.get("pe"),
+        "pb": d.get("pb"),
+        "roe_%": (d.get("roe") * 100) if d.get("roe") is not None else None,
+        "opm_%": (d.get("opm") * 100) if d.get("opm") is not None else None,
+        "de": d.get("de"),
+        "rev_qoq_%": growth(d, "rev", 1),
+        "rev_yoy_%": growth(d, "rev", 4),
+        "pat_qoq_%": growth(d, "pat", 1),
+        "pat_yoy_%": growth(d, "pat", 4),
+        "minervini": r.get("minervini_score"),
+        "sector": r.get("sector") or d.get("y_sector"),
+    })
+table = pd.DataFrame(rows)
+
+st.subheader("Shortlist with fundamentals")
+st.dataframe(table.round(2), hide_index=True, use_container_width=True)
+st.download_button("Download (CSV)", table.to_csv(index=False).encode(),
+                   file_name=f"quality-{as_of}.csv", mime="text/csv")
+st.caption(
+    "Blank cells are absent data, not zero. RS, close, Minervini and sector "
+    "come from the snapshot; everything else is fetched live."
+)
+
+
+# ── per-stock detail ───────────────────────────────────────────────────────
+st.subheader("Quarterly results")
+pick = st.selectbox("Stock", syms, index=0)
+d = data.get(pick, {})
+r = short[short["symbol"] == pick].iloc[0]
+
+badges = [f'<span class="rs">RS {r["rs_rating"]:.0f}</span>'
+          if pd.notna(r.get("rs_rating")) else '<span class="nab">RS n/a</span>']
+if d.get("roe") is not None:
+    c = "good" if d["roe"] >= 0.15 else "warnb"
+    badges.append(f'<span class="{c}">ROE {d["roe"] * 100:.1f}%</span>')
+if d.get("de") is not None:
+    c = "good" if d["de"] < 100 else "warnb"
+    badges.append(f'<span class="{c}">D/E {d["de"] / 100:.2f}</span>')
+if d.get("pe") is not None:
+    badges.append(f'<span>P/E {d["pe"]:.1f}</span>')
+if not d.get("ok"):
+    badges.append('<span class="nab">no fundamentals</span>')
+
+stats = [f'<div class="card-stat">Close <b>₹{r["close"]:,.0f}</b></div>'
+         if pd.notna(r.get("close")) else ""]
+if d.get("mcap"):
+    stats.append(f'<div class="card-stat">Mkt cap <b>₹{d["mcap"] / 1e7:,.0f} cr</b></div>')
+sec = r.get("sector") or d.get("y_sector")
+if sec:
+    stats.append(f'<div class="card-stat">Sector <b>{sec}</b></div>')
+
+st.markdown(
+    f'<div class="breakout-card bullish">'
+    f'<div class="card-top"><div class="card-symbol">{pick}</div>'
+    f'<span class="card-badges">{"".join(badges)}</span></div>'
+    f'<div class="card-stat-row">{"".join(stats)}</div>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
+
+q = d.get("quarters")
+if q is None or len(q) < 2:
+    st.info(
+        f"No quarterly statements available for {pick}. Yahoo does not carry "
+        f"them for every Indian listing; that is a gap in the source, and the "
+        f"momentum figures above are unaffected."
+    )
+else:
+    body = []
+    idx = list(q.index)
+    for i in range(len(q) - 1, -1, -1):
+        rev, pat = q["rev"].iloc[i], q["pat"].iloc[i]
+        rq = _pct(rev, q["rev"].iloc[i - 1]) if i >= 1 else None
+        ry = _pct(rev, q["rev"].iloc[i - 4]) if i >= 4 else None
+        pq = _pct(pat, q["pat"].iloc[i - 1]) if i >= 1 else None
+        py = _pct(pat, q["pat"].iloc[i - 4]) if i >= 4 else None
+
+        def cell(v, extra=""):
+            if v is None:
+                return f'<td class="na {extra}">n/a</td>'
+            k = "g" if v >= 0 else "b"
+            return f'<td class="{k} {extra}">{v:+.1f}%</td>'
+
+        def rupees(v, extra=""):
+            if v is None or v != v:
+                return f'<td class="na {extra}">n/a</td>'
+            return f'<td class="{extra}">{v / 1e7:,.0f}</td>'
+
+        label = pd.Timestamp(idx[i]).strftime("%b %Y")
+        body.append(
+            f"<tr><td>{label}</td>{rupees(rev)}{cell(rq)}{cell(ry)}"
+            f'{rupees(pat, "divl")}{cell(pq)}{cell(py)}</tr>'
+        )
+
+    st.markdown(
+        '<table class="qtbl"><thead>'
+        '<tr class="grp"><th></th><th class="rev" colspan="3">Revenue</th>'
+        '<th class="pat divl" colspan="3">PAT (profit)</th></tr>'
+        "<tr><th>Quarter</th><th>₹cr</th><th>QoQ</th><th>YoY</th>"
+        '<th class="divl">₹cr</th><th>QoQ</th><th>YoY</th></tr>'
+        "</thead><tbody>" + "".join(body) + "</tbody></table>",
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "QoQ compares with the previous quarter, YoY with the same quarter a "
+        "year earlier — so YoY needs five quarters of history and reads n/a "
+        "until there are. Every percentage is computed from the ₹cr column "
+        "beside it. Where PAT grows faster than revenue, margins are widening."
+    )
+
+with st.expander("Why this page cannot screen the whole universe"):
+    st.markdown("""
+Fundamental data arrives **one HTTP request per company**. Prices do not —
+`yf.download` takes a list and returns hundreds of symbols in a single call,
+which is why the nightly build can cover 3,046 stocks in minutes.
+
+There is no batch equivalent for fundamentals. At roughly a second per symbol,
+the full universe is around an hour of sequential requests, every night,
+against an endpoint under no obligation to serve it. So the choice is between
+fundamentals that **confirm** a momentum shortlist, which is this page, and
+fundamentals that **select** from the universe, which needs a data source with
+bulk access — a paid API, or NSE's own XBRL filings parsed and stored.
+
+The second is a real project, not an afternoon. This is the version that
+works today and tells the truth about what it does not know.
+""")
